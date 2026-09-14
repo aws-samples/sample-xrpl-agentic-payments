@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XRPL Agentic Payments — Autonomous Cross-Border Payments</title>
+    <style>
+        :root {
+            --bg: #050810;
+            --surface: #0d1117;
+            --surface-2: #161b22;
+            --border: rgba(255,255,255,0.06);
+            --text: #e6edf3;
+            --text-muted: #7d8590;
+            --accent: #00d4ff;
+            --accent-2: #7b61ff;
+            --success: #00ff88;
+            --danger: #ff4444;
+            --warning: #ffb800;
+            --orange: #FF9900;
+            --ripple-blue: #00AAE4;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow: hidden; }
+
+        /* Nav */
+        .nav { display: flex; align-items: center; justify-content: space-between; padding: 12px 32px; border-bottom: 1px solid var(--border); background: var(--surface); position: relative; z-index: 100; }
+        .nav-brand { display: flex; align-items: center; gap: 16px; }
+        .nav-brand .logo-text { font-size: 20px; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .nav-brand .powered { display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); }
+        .nav-brand .powered img { height: 16px; }
+        .nav-brand .powered span { font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .nav-links { display: flex; gap: 4px; }
+        .nav-link { padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; color: var(--text-muted); text-decoration: none; transition: all 0.2s; }
+        .nav-link:hover { color: var(--text); background: var(--surface-2); }
+        .nav-link.active { color: var(--accent); background: rgba(0,212,255,0.08); }
+        .nav-status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); transition: background 0.3s; }
+        .status-dot.connected { background: var(--success); box-shadow: 0 0 8px var(--success); }
+
+        /* Main layout */
+        .main { display: flex; flex-direction: column; height: calc(100vh - 53px); }
+
+        /* Hero section with video */
+        .hero { position: relative; padding: 32px 40px 24px; text-align: center; overflow: hidden; }
+        .hero-video { position: absolute; top: 50%; left: 40px; transform: translateY(-50%); width: 280px; opacity: 0.5; pointer-events: none; filter: brightness(1.3); }
+        .hero h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; position: relative; }
+        .hero h1 span { background: linear-gradient(135deg, var(--accent), var(--ripple-blue)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .hero p { font-size: 14px; color: var(--text-muted); position: relative; }
+        .value-props { display: flex; gap: 24px; justify-content: center; margin-top: 16px; position: relative; }
+        .vp { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+        .vp-val { font-size: 20px; font-weight: 700; font-family: 'SF Mono', monospace; color: var(--accent); transition: all 0.3s; }
+        .vp-val.highlight { color: var(--success); transform: scale(1.1); }
+        .vp-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+
+        /* Agent Pipeline - the star of the show */
+        .pipeline-section { padding: 0 40px; }
+        .pipeline { display: flex; align-items: center; justify-content: center; gap: 0; padding: 20px 0; opacity: 0; transform: translateY(10px); transition: all 0.4s ease; }
+        .pipeline.visible { opacity: 1; transform: translateY(0); }
+        .pipe-node { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); min-width: 120px; transition: all 0.4s ease; position: relative; }
+        .pipe-node.active { border-color: var(--accent); background: rgba(0,212,255,0.06); box-shadow: 0 0 20px rgba(0,212,255,0.15); }
+        .pipe-node.active .pipe-icon { animation: pulse-glow 1.5s infinite; }
+        .pipe-node.complete { border-color: var(--success); background: rgba(0,255,136,0.04); }
+        .pipe-node.failed { border-color: var(--danger); background: rgba(255,68,68,0.04); }
+        .pipe-icon { font-size: 20px; transition: all 0.3s; }
+        .pipe-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+        .pipe-status { font-size: 9px; color: var(--text-muted); min-height: 14px; }
+        .pipe-node.active .pipe-status { color: var(--accent); }
+        .pipe-node.complete .pipe-status { color: var(--success); }
+        .pipe-node.complete .pipe-label { color: var(--success); }
+        .pipe-connector { width: 32px; height: 2px; background: var(--border); position: relative; transition: background 0.4s; }
+        .pipe-connector.lit { background: linear-gradient(90deg, var(--success), var(--accent)); box-shadow: 0 0 6px rgba(0,212,255,0.3); }
+        @keyframes pulse-glow { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+        /* Activity feed - shows decisions, not prose */
+        .feed-section { flex: 1; padding: 0 40px; overflow: hidden; display: flex; flex-direction: column; }
+        .feed { flex: 1; overflow-y: auto; padding: 12px 0; display: flex; flex-direction: column; gap: 6px; }
+        .feed-item { display: flex; align-items: flex-start; gap: 12px; padding: 8px 14px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); opacity: 0; transform: translateX(-10px); animation: feed-in 0.3s ease forwards; }
+        @keyframes feed-in { to { opacity: 1; transform: translateX(0); } }
+        .feed-item .fi-icon { font-size: 14px; min-width: 20px; text-align: center; padding-top: 2px; }
+        .feed-item .fi-content { flex: 1; }
+        .feed-item .fi-title { font-size: 12px; font-weight: 600; color: var(--text); }
+        .feed-item .fi-detail { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+        .feed-item .fi-time { font-size: 10px; color: var(--text-muted); font-family: 'SF Mono', monospace; white-space: nowrap; padding-top: 2px; }
+        .feed-item.decision { border-color: rgba(0,255,136,0.15); }
+        .feed-item.decision .fi-title { color: var(--success); }
+        .feed-item.blocked { border-color: rgba(255,68,68,0.15); }
+        .feed-item.blocked .fi-title { color: var(--danger); }
+
+        /* Settlement card */
+        .settlement-card { margin: 12px 0; padding: 16px 20px; border-radius: 12px; background: linear-gradient(135deg, rgba(0,255,136,0.04), rgba(0,212,255,0.04)); border: 1px solid rgba(0,255,136,0.2); opacity: 0; animation: feed-in 0.5s ease 0.2s forwards; }
+        .settlement-card .sc-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+        .settlement-card .sc-header span { font-size: 14px; font-weight: 700; color: var(--success); }
+        .settlement-card .sc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+        .settlement-card .sc-item { }
+        .settlement-card .sc-item .label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+        .settlement-card .sc-item .value { font-size: 12px; font-weight: 600; font-family: 'SF Mono', monospace; margin-top: 2px; word-break: break-all; }
+        .settlement-card .sc-item .value a { color: var(--accent); text-decoration: none; }
+        .settlement-card .sc-item .value a:hover { text-decoration: underline; }
+
+        /* Input */
+        .input-section { padding: 16px 40px 24px; }
+        .input-wrap { display: flex; gap: 8px; max-width: 800px; margin: 0 auto; }
+        .input-wrap input { flex: 1; padding: 14px 18px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; color: var(--text); font-size: 14px; outline: none; transition: border-color 0.2s; }
+        .input-wrap input:focus { border-color: var(--accent); }
+        .input-wrap input::placeholder { color: var(--text-muted); }
+        .input-wrap button { padding: 14px 24px; background: linear-gradient(135deg, var(--accent-2), var(--accent)); border: none; border-radius: 12px; color: white; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+        .input-wrap button:hover { opacity: 0.9; }
+        .input-wrap button:disabled { opacity: 0.3; cursor: not-allowed; }
+        .input-hint { text-align: center; margin-top: 8px; font-size: 11px; color: var(--text-muted); }
+        .input-hint em { color: var(--accent); font-style: normal; cursor: pointer; }
+
+        /* Scrollbar */
+        .feed::-webkit-scrollbar { width: 4px; }
+        .feed::-webkit-scrollbar-track { background: transparent; }
+        .feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-brand">
+            <span class="logo-text">XRPL Agentic Payments</span>
+            <div class="powered">
+                <img src="/static/assets/aws-official-logo.png" alt="AWS">
+                <span>+ XRPL</span>
+            </div>
+        </div>
+        <div class="nav-links">
+            <a href="/overview" class="nav-link">Overview</a>
+            <a href="/payments" class="nav-link active">Payments</a>
+            <a href="/observability" class="nav-link">Observability</a>
+            <a href="/architecture" class="nav-link">Architecture</a>
+        </div>
+        <div class="nav-status">
+            <span class="status-dot" id="wsStatus"></span>
+            <span id="wsLabel">Connecting...</span>
+        </div>
+    </nav>
+
+    <div class="main">
+        <!-- Hero -->
+        <div class="hero">
+            <h1><span>Cross-Border Payments</span> powered by AI Agents</h1>
+            <p>What takes banks 3-5 days with SWIFT, AI agents settle in seconds on the XRP Ledger.</p>
+            <div class="value-props" id="valueProps">
+                <div class="vp"><span class="vp-val" id="vp-time">--</span><span class="vp-label">Settlement</span></div>
+                <div class="vp"><span class="vp-val" id="vp-cost">$0.0002</span><span class="vp-label">Fee (vs $45)</span></div>
+                <div class="vp"><span class="vp-val" id="vp-agents">5</span><span class="vp-label">AI Agents</span></div>
+                <div class="vp"><span class="vp-val" id="vp-human">0</span><span class="vp-label">Humans</span></div>
+                <div class="vp"><span class="vp-val" id="vp-decisions">--</span><span class="vp-label">Decisions</span></div>
+            </div>
+        </div>
+
+        <!-- Agent Pipeline Visualization -->
+        <div class="pipeline-section">
+            <div class="pipeline" id="pipeline">
+                <div class="pipe-node" id="p-compliance"><div class="pipe-icon">&#x1F6E1;</div><div class="pipe-label">Compliance</div><div class="pipe-status" id="ps-compliance"></div></div>
+                <div class="pipe-connector" id="pc-1"></div>
+                <div class="pipe-node" id="p-fx"><div class="pipe-icon">&#x1F4CA;</div><div class="pipe-label">FX Intel</div><div class="pipe-status" id="ps-fx"></div></div>
+                <div class="pipe-connector" id="pc-2"></div>
+                <div class="pipe-node" id="p-routing"><div class="pipe-icon">&#x1F5FA;</div><div class="pipe-label">Routing</div><div class="pipe-status" id="ps-routing"></div></div>
+                <div class="pipe-connector" id="pc-3"></div>
+                <div class="pipe-node" id="p-execution"><div class="pipe-icon">&#x26A1;</div><div class="pipe-label">Execution</div><div class="pipe-status" id="ps-execution"></div></div>
+                <div class="pipe-connector" id="pc-4"></div>
+                <div class="pipe-node" id="p-settlement"><div class="pipe-icon">&#x2705;</div><div class="pipe-label">Settlement</div><div class="pipe-status" id="ps-settlement"></div></div>
+            </div>
+        </div>
+
+        <!-- Activity Feed -->
+        <div class="feed-section">
+            <div class="feed" id="feed"></div>
+        </div>
+
+        <!-- Input -->
+        <div class="input-section">
+            <form class="input-wrap" onsubmit="send(event)">
+                <input type="text" id="input" placeholder="Describe your payment instruction..." autocomplete="off">
+                <button type="submit" id="btn">Execute</button>
+            </form>
+            <div class="input-hint">
+                Try: <em onclick="prefill('Send $500 to Acme GmbH in Germany')">"Send $500 to Acme GmbH in Germany"</em> or <em onclick="prefill('Transfer 1000 USD to Tokyo Trading in Japan')">"Transfer 1000 USD to Tokyo Trading in Japan"</em>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    let ws, heartbeat, startTime, decisionCount = 0;
+    const AGENT_MAP = {compliance:'compliance', fx_intelligence:'fx', routing:'routing', execution:'execution', settlement_monitor:'settlement'};
+    const CONNECTOR_MAP = {compliance:'pc-1', fx_intelligence:'pc-2', routing:'pc-3', execution:'pc-4'};
+    const HISTORY_KEY = 'xrpl_agentic_chat_v2';
+
+    // Reconnect budget. The old code retried every 2s forever, which against a
+    // server that is never coming back is just an unattended request loop.
+    const RECONNECT_MAX = 6;
+    let reconnectAttempts = 0;
+
+    function setStatus(cls, label) {
+        document.getElementById('wsStatus').className = cls;
+        document.getElementById('wsLabel').textContent = label;
+    }
+
+    // Why this is not `if (e.code === 1008)`: the server refuses the handshake
+    // BEFORE accept(), which is the right thing to do — an unauthenticated
+    // client never reaches a state where it can send a frame. But a pre-accept
+    // close is delivered to the browser as HTTP 403, not as a close frame, so
+    // onclose fires with 1006 and the 1008 branch was unreachable. Both pages
+    // therefore looped on reconnect forever after a session expired. Ask the
+    // server which it was instead of guessing from the code.
+    async function reconnectOrLogin() {
+        try {
+            const r = await fetch('/api/session', {credentials: 'same-origin'});
+            if (r.status === 401) {
+                setStatus('status-dot', 'Session expired');
+                location.href = '/login';
+                return;
+            }
+        } catch (err) {
+            // The probe itself failed, so this is the network, not the session.
+        }
+        if (++reconnectAttempts > RECONNECT_MAX) {
+            setStatus('status-dot', 'Disconnected — reload to retry');
+            return;
+        }
+        // Backoff, capped: 2s, 4s, 8s, 16s, 30s, 30s.
+        const delay = Math.min(2000 * 2 ** (reconnectAttempts - 1), 30000);
+        setStatus('status-dot', `Reconnecting in ${Math.round(delay / 1000)}s...`);
+        setTimeout(connect, delay);
+    }
+
+    function connect() {
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${proto}//${location.host}/ws/chat`);
+        ws.onopen = () => {
+            reconnectAttempts = 0;
+            setStatus('status-dot connected', 'Connected');
+            clearInterval(heartbeat);
+            heartbeat = setInterval(() => { if (ws.readyState === 1) ws.send('{"type":"ping"}'); }, 15000);
+        };
+        ws.onclose = () => {
+            clearInterval(heartbeat);
+            setStatus('status-dot', 'Disconnected');
+            reconnectOrLogin();
+        };
+        ws.onmessage = (e) => {
+            let msg;
+            try { msg = JSON.parse(e.data); } catch (err) { return; }
+            if (msg.type === 'pong') return;
+            if (msg.type === 'heartbeat') return;
+            if (msg.type === 'thinking') {
+                // Update the active pipeline node with a subtle "thinking" pulse
+                document.getElementById('vp-time').textContent = `${msg.seconds.toFixed(0)}s`;
+                return;
+            }
+            handleMsg(msg);
+        };
+    }
+
+    function handleMsg(msg) {
+        if (msg.type === 'status') {
+            startTime = Date.now();
+            document.getElementById('pipeline').classList.add('visible');
+            addFeed('system', '🚀', 'Payment orchestration started', msg.message);
+        }
+        if (msg.type === 'request') {
+            // Echo what the server validated, so the operator sees the exact
+            // amount and address that will be signed rather than trusting that
+            // the sentence they typed was read the way they meant it.
+            const r = msg.data || {};
+            addFeed('system', '📝', `Validated: ${r.amount} ${r.currency} → ${r.destination}`,
+                `Recipient: ${r.recipient_name}${r.recipient_country ? ` (${r.recipient_country})` : ''}`);
+        }
+        if (msg.type === 'thought') {
+            const agent = msg.data?.agent;
+            const evt = msg.data?.event;
+            const data = msg.data?.data || {};
+
+            if (evt === 'agent_start') {
+                activateNode(agent);
+                addFeed('active', getIcon(agent), `${getLabel(agent)} activated`, getStartDetail(agent, data));
+            }
+            if (evt === 'agent_complete') {
+                completeNode(agent, data);
+                decisionCount++;
+                document.getElementById('vp-decisions').textContent = decisionCount;
+                document.getElementById('vp-time').textContent = elapsed();
+                addFeed('decision', '✔', `${getLabel(agent)} — ${getOutcome(agent, data)}`, elapsed());
+            }
+            if (evt === 'tool_call') {
+                addFeed('tool', '→', `Tool: ${data.tool}`, '');
+            }
+            if (evt === 'compliance_result') {
+                const status = data.status;
+                if (status === 'BLOCKED') {
+                    addFeed('blocked', '🚫', `BLOCKED — ${data.entity} failed sanctions screening`, '');
+                }
+            }
+            if (evt === 'payment_submitted') {
+                addFeed('decision', '⚡', `Transaction broadcast`, `Hash: ${data.hash?.slice(0,16)}...`);
+            }
+            if (evt === 'settlement_confirmed') {
+                addFeed('decision', '✅', `Settled on ledger #${data.ledger_index}`, 'Irreversible');
+                // Show settlement proof card immediately
+                showSettlementFromEvent(data);
+            }
+        }
+        if (msg.type === 'result') {
+            const d = msg.data;
+            document.getElementById('btn').disabled = false;
+            if (d.status === 'settled') {
+                showSettlement(d);
+                saveHistory(d);
+            } else if (d.status === 'blocked') {
+                addFeed('blocked', '🚫', 'Payment Refused', d.reason?.slice(0, 200));
+            } else if (d.status === 'awaiting_approval') {
+                addFeed('blocked', '⏸', 'Held for human approval', d.reason?.slice(0, 200));
+            } else if (d.status === 'failed') {
+                // A hash with a tec* result is a failure, not a settlement. It
+                // used to reach here as an unlabelled non-settled result and
+                // show nothing at all.
+                addFeed('blocked', '⚠', 'Payment Failed', d.reason?.slice(0, 200));
+            } else if (d.status === 'pending') {
+                addFeed('system', '⏳', 'Not yet confirmed on the ledger', d.reason?.slice(0, 200));
+            }
+        }
+        if (msg.type === 'error') {
+            document.getElementById('btn').disabled = false;
+            addFeed('blocked', '⚠', 'Error', msg.message?.slice(0, 150));
+        }
+    }
+
+    function activateNode(agent) {
+        const id = AGENT_MAP[agent];
+        if (!id) return;
+        document.getElementById(`p-${id}`).classList.add('active');
+        document.getElementById(`ps-${id}`).textContent = 'Processing...';
+    }
+
+    function completeNode(agent, data) {
+        const id = AGENT_MAP[agent];
+        if (!id) return;
+        const node = document.getElementById(`p-${id}`);
+        node.classList.remove('active');
+        node.classList.add('complete');
+        document.getElementById(`ps-${id}`).textContent = getShortOutcome(agent, data);
+        const conn = CONNECTOR_MAP[agent];
+        if (conn) document.getElementById(conn).classList.add('lit');
+        saveState();
+    }
+
+    function getIcon(agent) {
+        const icons = {compliance:'🛡', fx_intelligence:'📊', routing:'🗺', execution:'⚡', settlement_monitor:'✅'};
+        return icons[agent] || '⚙';
+    }
+    function getLabel(agent) {
+        const labels = {compliance:'Compliance', fx_intelligence:'FX Intelligence', routing:'Routing', execution:'Execution', settlement_monitor:'Settlement'};
+        return labels[agent] || agent;
+    }
+    function getStartDetail(agent, data) {
+        if (agent === 'compliance') return `Screening: ${data.recipient || 'entity'}`;
+        if (agent === 'fx_intelligence') return `Querying XRPL DEX for ${data.currency || 'USD'} paths`;
+        if (agent === 'routing') return `Analyzing optimal route for ${data.amount || '?'} USD`;
+        if (agent === 'execution') return `Submitting to ${data.destination?.slice(0,12) || 'XRPL'}...`;
+        if (agent === 'settlement_monitor') return `Watching ledger for ${data.hash?.slice(0,12) || 'tx'}...`;
+        return '';
+    }
+    function getOutcome(agent, data) {
+        if (agent === 'compliance') return data.status === 'CLEAR' ? 'CLEAR — safe to proceed' : 'BLOCKED';
+        if (agent === 'fx_intelligence') return `${data.paths_found || 0} path(s) found`;
+        if (agent === 'routing') return data.decision === 'APPROVED' ? 'APPROVED — direct path' : data.decision;
+        if (agent === 'execution') return data.hash ? `TX submitted` : 'Complete';
+        if (agent === 'settlement_monitor') return data.settled ? 'SETTLED — irreversible' : 'Pending';
+        return 'Done';
+    }
+    function getShortOutcome(agent, data) {
+        if (agent === 'compliance') return data.status || '?';
+        if (agent === 'fx_intelligence') return `${data.paths_found || 1} path`;
+        if (agent === 'routing') return data.decision || '?';
+        if (agent === 'execution') return 'Submitted';
+        if (agent === 'settlement_monitor') return 'Final';
+        return '';
+    }
+
+    function elapsed() {
+        if (!startTime) return '';
+        return `${((Date.now() - startTime) / 1000).toFixed(1)}s`;
+    }
+
+    // Every value that reaches the feed originates off-box: recipient names and
+    // countries come from the user, and tool payloads, hashes and error strings
+    // come from the network. None of it is built into an HTML string — a `<img
+    // onerror>` in a recipient name would have executed with the session cookie
+    // in scope. div() sets textContent, so markup arriving as data stays data.
+    function div(className, text) {
+        const el = document.createElement('div');
+        el.className = className;
+        if (text !== undefined && text !== null && text !== '') el.textContent = String(text);
+        return el;
+    }
+
+    // The feed is kept as data, not as markup. Persisting innerHTML and writing
+    // it back on restore re-parsed attacker-controlled HTML from sessionStorage
+    // on every page load; records re-render through the same safe path instead.
+    let feedRecords = [];
+
+    function addFeed(type, icon, title, detail) {
+        pushFeedRecord({kind: 'item', type, icon, title, detail, time: elapsed()});
+    }
+
+    function pushFeedRecord(rec) {
+        feedRecords.push(rec);
+        renderFeedRecord(rec);
+        saveState();
+    }
+
+    function renderFeedRecord(rec) {
+        const feed = document.getElementById('feed');
+        const el = rec.kind === 'settlement' ? buildSettlementCard(rec) : buildFeedItem(rec);
+        if (!el) return;
+        feed.appendChild(el);
+        feed.scrollTop = feed.scrollHeight;
+    }
+
+    function buildFeedItem(rec) {
+        const item = document.createElement('div');
+        item.className = `feed-item ${rec.type || ''}`.trim();
+        item.appendChild(div('fi-icon', rec.icon));
+        const content = div('fi-content');
+        content.appendChild(div('fi-title', rec.title));
+        if (rec.detail) content.appendChild(div('fi-detail', rec.detail));
+        item.appendChild(content);
+        item.appendChild(div('fi-time', rec.time));
+        return item;
+    }
+
+    // A ledger hash is 64 hex characters. Anything else is not linked: the href
+    // was interpolated straight into markup, so a crafted "hash" could close the
+    // attribute and inject a tag, or smuggle in a javascript: URL.
+    const TX_HASH_RE = /^[0-9A-Fa-f]{64}$/;
+    const EXPLORER_BASE = 'https://testnet.xrpl.org/transactions/';
+
+    function txLink(hash, label) {
+        if (!TX_HASH_RE.test(hash || '')) return document.createTextNode(String(hash || '—'));
+        const a = document.createElement('a');
+        a.href = EXPLORER_BASE + hash;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = label;
+        return a;
+    }
+
+    function scItem(label, valueNode) {
+        const item = div('sc-item');
+        item.appendChild(div('label', label));
+        const value = div('value');
+        value.appendChild(valueNode);
+        item.appendChild(value);
+        return item;
+    }
+
+    function buildSettlementCard(rec) {
+        const card = document.createElement('div');
+        card.className = 'settlement-card';
+        const header = div('sc-header');
+        header.appendChild(div('', '✅ Payment Settled — Irreversible'));
+        card.appendChild(header);
+        const grid = div('sc-grid');
+        grid.appendChild(scItem('Transaction Hash', txLink(rec.hash, rec.hash || '—')));
+        grid.appendChild(scItem('Ledger', document.createTextNode(`#${rec.ledger ?? '?'}`)));
+        grid.appendChild(scItem('Total Time', document.createTextNode(String(rec.time || ''))));
+        grid.appendChild(scItem('Verify on XRPL', txLink(rec.hash, 'View on Explorer ↗')));
+        card.appendChild(grid);
+        return card;
+    }
+
+    function showSettlementFromEvent(data) {
+        // Triggered directly from settlement_confirmed event
+        const timeEl = document.getElementById('vp-time');
+        timeEl.textContent = elapsed();
+        timeEl.classList.add('highlight');
+        document.getElementById('vp-decisions').textContent = decisionCount;
+        document.getElementById('btn').disabled = false;
+        addSettlementCard(data.hash || '', data.ledger_index ?? '?', elapsed());
+    }
+
+    function showSettlement(d) {
+        // Triggered from final result message (backup)
+        const timeEl = document.getElementById('vp-time');
+        timeEl.textContent = `${d.elapsed_seconds}s`;
+        timeEl.classList.add('highlight');
+        document.getElementById('vp-decisions').textContent = decisionCount;
+        addSettlementCard(d.tx_hash || '', d.ledger_index ?? '?', `${d.elapsed_seconds}s`);
+    }
+
+    function addSettlementCard(hash, ledger, time) {
+        // Don't duplicate if already shown
+        if (document.getElementById('feed').querySelector('.settlement-card')) return;
+        pushFeedRecord({kind: 'settlement', hash, ledger, time});
+    }
+
+    function send(e) {
+        e.preventDefault();
+        const input = document.getElementById('input');
+        const text = input.value.trim();
+        if (!text || ws.readyState !== 1) return;
+
+        // Reset
+        decisionCount = 0;
+        document.getElementById('vp-time').textContent = '--';
+        document.getElementById('vp-time').classList.remove('highlight');
+        document.getElementById('vp-decisions').textContent = '--';
+        feedRecords = [];
+        document.getElementById('feed').replaceChildren();
+        document.querySelectorAll('.pipe-node').forEach(n => n.classList.remove('active','complete','failed'));
+        document.querySelectorAll('.pipe-connector').forEach(c => c.classList.remove('lit'));
+        document.querySelectorAll('[id^=ps-]').forEach(s => s.textContent = '');
+        document.getElementById('pipeline').classList.remove('visible');
+
+        addFeed('system', '💬', text, '');
+        input.value = '';
+
+        // These extractors are a convenience for typing an instruction in prose,
+        // nothing more. When one finds nothing it now sends nothing, and the
+        // server refuses the request by name. They used to substitute 100 USD to
+        // a hardcoded test address, so a sentence the regex could not read became
+        // a real payment to an address the user never typed.
+        const fields = {
+            message: text,
+            recipient_name: extractRecipient(text),
+            recipient_country: extractCountry(text),
+            amount: extractAmount(text),
+            destination: extractAddress(text),
+            currency: extractCurrency(text),
+        };
+        const missing = ['amount', 'destination', 'recipient_name'].filter(k => !fields[k]);
+        if (missing.length) {
+            addFeed('blocked', '⚠', 'I could not read that as a payment',
+                `Could not find: ${missing.join(', ')}. Try: "Send 100 USD to Acme Corp at rXXXX... in United States".`);
+            document.getElementById('btn').disabled = false;
+            return;
+        }
+
+        document.getElementById('btn').disabled = true;
+        ws.send(JSON.stringify(fields));
+    }
+
+    function prefill(text) { document.getElementById('input').value = text; document.getElementById('input').focus(); }
+    function extractAmount(t) {
+        // Anchored to a currency marker first. A bare digit scan would happily
+        // pick a numeral out of the middle of an r-address, since base58
+        // includes digits, and send that as the amount.
+        const num = '(\\d[\\d,]*(?:\\.\\d+)?)';
+        const m = t.match(new RegExp(`\\$\\s*${num}`))
+               || t.match(new RegExp(`${num}\\s*(?:USD|RLUSD|XRP)\\b`, 'i'))
+               || t.match(new RegExp(`(?:^|\\s)${num}(?=\\s|$)`));
+        return m ? m[1].replace(/,/g, '') : '';
+    }
+    const XRPL_ADDRESS_RE = /\b(r[1-9A-HJ-NP-Za-km-z]{24,34})\b/;
+    function extractRecipient(t) {
+        const m = t.match(/to\s+(.+?)(?:\s+at\s+r|\s+in\s+|\s*$)/i);
+        const name = m ? m[1].trim() : '';
+        // "Send money to rXXXX" names no recipient. Passing the address through
+        // as the name would send it to sanctions screening, which cannot screen
+        // an address, and the screen would come back CLEAR by default.
+        return XRPL_ADDRESS_RE.test(name) ? '' : name;
+    }
+    function extractCountry(t) { const m = t.match(/in\s+([\w\s]+)$/i); return m ? m[1].trim() : ''; }
+    function extractAddress(t) { const m = t.match(XRPL_ADDRESS_RE); return m ? m[1] : ''; }
+    function extractCurrency(t) {
+        const m = t.match(/\b(RLUSD|USD|XRP)\b/i);
+        if (m) return m[1].toUpperCase();
+        return /\$\s*\d/.test(t) ? 'USD' : '';
+    }
+
+    // State persistence — survives tab switches and refreshes
+    const STATE_KEY = 'xrpl_agentic_payment_state';
+    function saveState() {
+        const state = {
+            feed: feedRecords,
+            pipelineVisible: document.getElementById('pipeline').classList.contains('visible'),
+            pipeNodes: {},
+            pipeConnectors: {},
+            valueProps: {
+                time: document.getElementById('vp-time').textContent,
+                decisions: document.getElementById('vp-decisions').textContent,
+                timeHighlight: document.getElementById('vp-time').classList.contains('highlight'),
+            },
+            decisionCount: decisionCount,
+            ts: Date.now(),
+        };
+        document.querySelectorAll('.pipe-node').forEach(n => {
+            state.pipeNodes[n.id] = {active: n.classList.contains('active'), complete: n.classList.contains('complete')};
+        });
+        document.querySelectorAll('.pipe-connector').forEach(c => {
+            state.pipeConnectors[c.id] = c.classList.contains('lit');
+        });
+        document.querySelectorAll('[id^=ps-]').forEach(s => {
+            state.pipeNodes[s.id] = s.textContent;
+        });
+        sessionStorage.setItem(STATE_KEY, JSON.stringify(state));
+    }
+
+    function restoreState() {
+        const raw = sessionStorage.getItem(STATE_KEY);
+        if (!raw) return;
+        let state;
+        try { state = JSON.parse(raw); } catch (e) { sessionStorage.removeItem(STATE_KEY); return; }
+        if (!state || typeof state !== 'object') return;
+        // Only restore if state is less than 10 minutes old
+        if (Date.now() - state.ts > 600000) return;
+        // Re-render from records through the same DOM path as live events, so
+        // restored content is escaped exactly like it was the first time.
+        if (Array.isArray(state.feed)) {
+            feedRecords = state.feed;
+            document.getElementById('feed').replaceChildren();
+            feedRecords.forEach(renderFeedRecord);
+        }
+        if (state.pipelineVisible) document.getElementById('pipeline').classList.add('visible');
+        if (state.pipeNodes) {
+            for (const [id, val] of Object.entries(state.pipeNodes)) {
+                const el = document.getElementById(id);
+                if (!el) continue;
+                if (typeof val === 'string') { el.textContent = val; continue; }
+                if (val.active) el.classList.add('active');
+                if (val.complete) el.classList.add('complete');
+            }
+        }
+        if (state.pipeConnectors) {
+            for (const [id, lit] of Object.entries(state.pipeConnectors)) {
+                if (lit) document.getElementById(id)?.classList.add('lit');
+            }
+        }
+        if (state.valueProps) {
+            document.getElementById('vp-time').textContent = state.valueProps.time;
+            document.getElementById('vp-decisions').textContent = state.valueProps.decisions;
+            if (state.valueProps.timeHighlight) document.getElementById('vp-time').classList.add('highlight');
+        }
+        decisionCount = state.decisionCount || 0;
+    }
+
+    restoreState();
+
+    // If no state was restored, check server for last payment
+    if (feedRecords.length === 0) {
+        fetch('/api/last-payment', {credentials: 'same-origin'}).then(r => {
+            // 401 here means the cookie expired while the page was open. Sending
+            // the user to log in beats replaying an empty history as though there
+            // had been no payments.
+            if (r.status === 401) { location.href = '/login'; return null; }
+            return r.ok ? r.json() : null;
+        }).then(data => {
+            if (data && data.events && data.events.length > 0) {
+                document.getElementById('pipeline').classList.add('visible');
+                data.events.forEach(evt => {
+                    const agent = evt.agent;
+                    const event = evt.event;
+                    const evtData = evt.data || {};
+                    if (event === 'agent_start') {
+                        activateNode(agent);
+                        addFeed('active', getIcon(agent), `${getLabel(agent)} activated`, getStartDetail(agent, evtData));
+                    }
+                    if (event === 'agent_complete') {
+                        completeNode(agent, evtData);
+                        decisionCount++;
+                        addFeed('decision', '✔', `${getLabel(agent)} — ${getOutcome(agent, evtData)}`, '');
+                    }
+                    if (event === 'settlement_confirmed') {
+                        addFeed('decision', '✅', `Settled on ledger #${evtData.ledger_index}`, 'Irreversible');
+                    }
+                });
+                document.getElementById('vp-decisions').textContent = decisionCount;
+                // Check if settlement happened
+                const settled = data.events.find(e => e.event === 'settlement_confirmed');
+                if (settled) {
+                    document.getElementById('vp-time').textContent = 'Settled';
+                    document.getElementById('vp-time').classList.add('highlight');
+                }
+                saveState();
+            }
+        }).catch(() => {});
+    }
+
+    function saveHistory(d) {
+        const h = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+        h.push({tx_hash: d.tx_hash, ledger: d.ledger_index, time: d.elapsed_seconds, ts: Date.now()});
+        if (h.length > 50) h.splice(0, h.length - 50);
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
+    }
+
+    connect();
+    </script>
+</body>
+</html>

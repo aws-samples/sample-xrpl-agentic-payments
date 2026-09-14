@@ -1,0 +1,43 @@
+[build-system]
+# Declared so the project is actually buildable/installable — without a
+# build-system table there is no backend, so `pip install .` (and therefore the
+# xrpl-agentic-payments-mcp console script below) could never work.
+# setuptools>=77 for the PEP 639 SPDX `license` string used below.
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xrpl-agentic-payments"
+version = "0.1.0"
+description = "Multi-agent autonomous cross-border payments on XRPL using AWS Bedrock AgentCore"
+requires-python = ">=3.11"
+license = "MIT-0"
+authors = [
+    {name = "Sunita Koppar", email = "skoppar@amazon.com"},
+    {name = "Aman Tiwari", email = "AmanLiftsAndCodes@users.noreply.github.com"}
+]
+# Read from requirements.txt rather than duplicated here. requirements.txt stays
+# the single source of truth (it is what the Dockerfiles and CI install), so the
+# two can never disagree about a version floor or a security pin.
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools.packages.find]
+# `functions` has no __init__.py on purpose: it IS the Lambda code asset
+# (infra/lib/tools-stack.ts), where every tool has to be a top-level module. It
+# is picked up as a namespace package so the MCP server's
+# `from functions.xrpl_core import ...` fallback resolves in an installed wheel
+# the same way it does from a checkout — otherwise the console script below
+# fails at import time.
+include = ["src*", "functions*"]
+namespaces = true
+exclude = ["*__pycache__*", "tests*"]
+
+[project.scripts]
+xrpl-agentic-payments-mcp = "src.mcp_server.server:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

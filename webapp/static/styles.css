@@ -1,0 +1,88 @@
+/* XRPL Agentic Payments — Global Styles */
+:root {
+    --bg: #050810;
+    --surface: #0d1117;
+    --surface-2: #161b22;
+    --border: rgba(255,255,255,0.06);
+    --text: #e6edf3;
+    --text-muted: #7d8590;
+    --accent: #00d4ff;
+    --accent-2: #7b61ff;
+    --success: #00ff88;
+    --danger: #ff4444;
+    --warning: #ffb800;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+a { color: var(--accent); text-decoration: none; }
+
+/* Navigation */
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 16px 32px; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 100; }
+.nav-brand { display: flex; align-items: center; gap: 12px; }
+.logo-text { font-size: 20px; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.nav-badge { font-size: 10px; padding: 2px 8px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+.nav-links { display: flex; gap: 4px; }
+.nav-link { padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; color: var(--text-muted); transition: all 0.2s; }
+.nav-link:hover { color: var(--text); background: var(--surface-2); }
+.nav-link.active { color: var(--accent); background: rgba(0,212,255,0.08); }
+.nav-status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); transition: background 0.3s; }
+.status-dot.connected { background: var(--success); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+/* Chat Container */
+.chat-container { max-width: 900px; margin: 0 auto; padding: 32px 24px; display: flex; flex-direction: column; height: calc(100vh - 60px); }
+.chat-header { text-align: center; margin-bottom: 24px; }
+.chat-header h1 { font-size: 24px; font-weight: 600; margin-bottom: 8px; }
+.chat-header p { font-size: 14px; color: var(--text-muted); }
+
+/* Messages */
+.chat-messages { flex: 1; overflow-y: auto; padding: 16px 0; display: flex; flex-direction: column; gap: 16px; }
+.message { display: flex; }
+.message.user { justify-content: flex-end; }
+.message-content { max-width: 80%; padding: 12px 16px; border-radius: 12px; font-size: 14px; line-height: 1.6; }
+.message.user .message-content { background: linear-gradient(135deg, var(--accent-2), var(--accent)); color: white; border-bottom-right-radius: 4px; }
+.message.system .message-content { background: var(--surface-2); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+.message.agent .message-content { background: var(--surface); border: 1px solid rgba(0,255,136,0.15); border-bottom-left-radius: 4px; }
+.message.error .message-content { background: rgba(255,68,68,0.1); border: 1px solid rgba(255,68,68,0.2); color: var(--danger); }
+.message.success .message-content { background: rgba(0,255,136,0.06); border: 1px solid rgba(0,255,136,0.2); border-bottom-left-radius: 4px; }
+.message-content code { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-family: 'SF Mono', monospace; font-size: 12px; }
+.message-content em { color: var(--accent); font-style: normal; }
+
+/* Agent Timeline */
+.agent-timeline { display: flex; align-items: center; justify-content: center; gap: 0; padding: 16px; margin: 12px 0; background: var(--surface); border-radius: 12px; border: 1px solid var(--border); }
+.timeline-step { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; font-size: 12px; transition: all 0.3s; opacity: 0.4; }
+.timeline-step.active { opacity: 1; background: rgba(0,212,255,0.1); }
+.timeline-step.complete { opacity: 1; }
+.timeline-step.complete .t-icon { filter: none; }
+.timeline-connector { width: 24px; height: 1px; background: var(--border); }
+.t-label { color: var(--text-muted); font-weight: 500; }
+.t-status { font-size: 11px; color: var(--success); }
+
+/* Input */
+.chat-input-container { padding: 16px 0; }
+.chat-input-container form { display: flex; gap: 8px; }
+.chat-input-container input { flex: 1; padding: 14px 18px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 14px; outline: none; transition: border-color 0.2s; }
+.chat-input-container input:focus { border-color: var(--accent); }
+.chat-input-container button { padding: 14px 24px; background: linear-gradient(135deg, var(--accent-2), var(--accent)); border: none; border-radius: 10px; color: white; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+.chat-input-container button:hover { opacity: 0.9; }
+.chat-input-container button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Observability Page */
+.obs-container { max-width: 1200px; margin: 0 auto; padding: 32px; }
+.obs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-top: 24px; }
+.obs-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.obs-card h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 12px; }
+.obs-value { font-size: 32px; font-weight: 700; font-family: 'SF Mono', monospace; }
+.obs-value.green { color: var(--success); }
+.obs-value.blue { color: var(--accent); }
+.obs-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+
+/* Architecture Page */
+.arch-container { max-width: 1400px; margin: 0 auto; padding: 32px; }
+.arch-container h1 { font-size: 28px; margin-bottom: 8px; }
+.arch-container .subtitle { font-size: 14px; color: var(--text-muted); margin-bottom: 32px; }
+.arch-diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 40px; overflow-x: auto; }
+.arch-logos { display: flex; align-items: center; gap: 24px; margin-bottom: 32px; }
+.arch-logos img { height: 32px; }

@@ -1,0 +1,34 @@
+# Pulled from ECR Public rather than Docker Hub: the same upstream Docker
+# Official Image, mirrored by AWS, so base images never come from an external
+# registry (and the pull is not subject to Docker Hub rate limits).
+FROM public.ecr.aws/docker/library/python:3.13-slim
+WORKDIR /app
+# Install from the pinned manifest instead of a hand-written `pip install a b c`
+# list. The inline list was missing python-multipart, which FastAPI requires to
+# register the Form(...) login route — the image built fine and the app died on
+# import. requirements.txt carries it, plus the uvicorn[standard] extra that
+# /ws/chat needs (see the comment there before relaxing that pin).
+# Copied before the source so a source-only change reuses the install layer.
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+COPY src/ /app/src/
+# config/ is deliberately NOT copied. It holds config/wallets.json — private
+# XRPL wallet seeds — and an image layer is not a trust boundary: anyone who can
+# pull the image gets the seeds, and `docker history` keeps them even if a later
+# layer deletes the file. Nor is the file mounted at runtime: infra/lib/eks-stack.ts
+# defines no wallets SecretProviderClass, so the pod never sees a seed. It needs
+# two public strings, not the file, and gets them as plain env vars
+# (XRPL_EXECUTION_ADDRESS / XRPL_RLUSD_ISSUER) — see the comment above
+# XrplAddresses in eks-stack.ts. Signing happens in the MCP server on AgentCore
+# Runtime and in the tool Lambdas, each reading the secret itself at invoke time.
+COPY data/ /app/data/
+COPY webapp/ /app/webapp/
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+ENV AWS_DEFAULT_REGION=us-west-2
+# Names the Secrets Manager secret holding the wallet JSON. Documentation only:
+# no code in this image reads it, and the one place that does load the secret
+# (functions/shared.py, in the tool Lambdas) hardcodes the same id.
+ENV WALLETS_SECRET_ID=xrpl-agentic-payments/wallets
+EXPOSE 8080
+CMD ["python", "-m", "uvicorn", "webapp.app:app", "--host", "0.0.0.0", "--port", "8080"]

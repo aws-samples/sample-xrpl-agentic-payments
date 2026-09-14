@@ -1,0 +1,66 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+#
+# Build context filter for the two repo-root images (Dockerfile → MCP server,
+# Dockerfile.webapp → web app). Both are built with `.` as the context, so
+# without this file the ENTIRE repository — including config/wallets.json
+# (private XRPL wallet seeds), .env, and the .git history — is uploaded to the
+# Docker daemon and is readable by every COPY and every RUN in the build.
+#
+# Deny-by-default, then re-allow only the paths the two Dockerfiles actually
+# COPY. A new COPY of an unlisted path fails the build loudly ("not found in
+# build context") instead of silently widening the context again.
+# Both the directory and its `/**` form are re-allowed so the allowlist does
+# not depend on which builder (legacy or BuildKit) expands a bare directory.
+
+*
+
+# ── Re-allow: dependency manifests (installed before source, for layer cache) ──
+!requirements.txt
+!deploy/requirements.txt
+
+# ── Re-allow: application source ───────────────────────────────────────────
+!src/
+!src/**
+!webapp/
+!webapp/**
+# Tool logic shared with the Gateway Lambdas; the MCP image copies these two
+# files individually, not the whole functions/ directory.
+!functions/sanctions_matcher.py
+!functions/xrpl_core.py
+# OFAC SDN dataset — public U.S. Treasury data, not a secret.
+!data/
+!data/**
+
+# ── Never, under any circumstance, even if re-allowed above ────────────────
+# config/ holds wallets.json: private XRPL seeds. Nothing in an image needs it;
+# wallet material is read from Secrets Manager (xrpl-agentic-payments/wallets)
+# at runtime. These rules come after the re-includes, and the last matching
+# rule wins, so a future `!config/` cannot resurrect the seeds by accident.
+config/
+**/config/wallets.json
+**/wallets.json
+**/*.secret
+.env
+.env.*
+.git/
+.gitignore
+**/node_modules/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.venv/
+**/venv/
+**/build/
+**/dist/
+**/*.egg-info/
+**/*.zip
+cdk.out/
+infra/
+.claude/
+.kiro/
+diagrams/
+docs/
+scripts/
+tests/
+**/.DS_Store

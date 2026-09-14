@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XRPL Agentic Payments — Overview</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        .ov-page { max-width: 960px; margin: 0 auto; padding: 40px 24px 60px; }
+        .ov-hero { text-align: center; margin-bottom: 48px; }
+        .ov-hero h1 { font-size: 32px; font-weight: 700; margin-bottom: 12px; }
+        .ov-hero h1 span { background: linear-gradient(135deg, #00d4ff, #00AAE4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .ov-hero p { font-size: 15px; color: var(--text-muted); line-height: 1.7; max-width: 700px; margin: 0 auto; }
+        .ov-hero .logos { display: flex; align-items: center; justify-content: center; gap: 20px; margin-top: 20px; }
+        .ov-hero .logos img { height: 24px; }
+        .ov-hero .logos .plus { color: var(--text-muted); font-size: 18px; }
+
+        .section { margin-bottom: 48px; }
+        .section h2 { font-size: 20px; font-weight: 600; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+        .section p { font-size: 14px; color: var(--text-muted); line-height: 1.8; margin-bottom: 12px; }
+        .section strong { color: var(--text); }
+
+        /* Before/After */
+        .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 16px; }
+        .compare-card { padding: 24px; border-radius: 12px; border: 1px solid var(--border); }
+        .compare-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 14px; }
+        .compare-card ul { list-style: none; font-size: 13px; line-height: 2.2; color: var(--text-muted); }
+        .compare-card ul li::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 10px; vertical-align: middle; }
+        .compare-card.before { border-color: rgba(255,68,68,0.15); }
+        .compare-card.before h3 { color: var(--danger); }
+        .compare-card.before ul li::before { background: var(--danger); }
+        .compare-card.after { border-color: rgba(0,255,136,0.15); }
+        .compare-card.after h3 { color: var(--success); }
+        .compare-card.after ul li::before { background: var(--success); }
+
+        /* Agent flow */
+        .flow-visual { display: flex; align-items: center; gap: 0; margin: 20px 0; padding: 16px; background: var(--surface); border-radius: 12px; border: 1px solid var(--border); overflow-x: auto; }
+        .fv-node { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); text-align: center; min-width: 110px; }
+        .fv-node .fv-icon { font-size: 18px; }
+        .fv-node .fv-name { font-size: 10px; font-weight: 600; margin-top: 4px; color: var(--text); }
+        .fv-node .fv-maps { font-size: 9px; color: var(--text-muted); margin-top: 2px; }
+        .fv-arrow { width: 28px; text-align: center; color: var(--accent); font-size: 14px; }
+
+        /* Audience cards */
+        .audience-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-top: 16px; }
+        .audience-card { padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+        .audience-card h4 { font-size: 12px; font-weight: 600; margin-bottom: 6px; color: var(--accent); }
+        .audience-card p { font-size: 11px; color: var(--text-muted); line-height: 1.5; margin: 0; }
+
+        /* Scope list */
+        .scope-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+        .scope-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px; background: var(--surface); border-radius: 8px; border: 1px solid var(--border); }
+        .scope-item .si-icon { font-size: 16px; }
+        .scope-item .si-text { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+        .scope-item .si-text strong { color: var(--text); display: block; margin-bottom: 2px; }
+
+        .cta { text-align: center; margin-top: 40px; padding: 24px; background: linear-gradient(135deg, rgba(0,212,255,0.04), rgba(123,97,255,0.04)); border: 1px solid rgba(0,212,255,0.15); border-radius: 12px; }
+        .cta a { display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #7b61ff, #00d4ff); border-radius: 10px; color: white; text-decoration: none; font-size: 14px; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-brand">
+            <span class="logo-text">XRPL Agentic Payments</span>
+            <div class="powered" style="display:flex;align-items:center;gap:8px;padding:4px 10px;border-radius:6px;background:var(--surface-2);border:1px solid var(--border);">
+                <img src="/static/assets/aws-official-logo.png" alt="AWS" style="height:16px;">
+                <span style="font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">+ XRPL</span>
+            </div>
+        </div>
+        <div class="nav-links">
+            <a href="/overview" class="nav-link active">Overview</a>
+            <a href="/payments" class="nav-link">Payments</a>
+            <a href="/observability" class="nav-link">Observability</a>
+            <a href="/architecture" class="nav-link">Architecture</a>
+        </div>
+        <div class="nav-status"><span class="status-dot connected"></span><span>Live</span></div>
+    </nav>
+
+    <div class="ov-page">
+        <!-- Hero -->
+        <div class="ov-hero">
+            <h1><span>Cross-Border Payments</span> powered by AI Agents</h1>
+            <p>A working prototype that demonstrates how financial institutions can embed AI agents into their existing cross-border payment workflows — replacing days of manual processing with seconds of intelligent execution on the XRP Ledger.</p>
+            <div class="logos">
+                <img src="/static/assets/aws-official-logo.png" alt="AWS">
+                <span class="plus">+</span>
+                <svg width="80" height="24" viewBox="0 0 80 24"><text x="0" y="18" font-size="16" font-weight="700" fill="#00AAE4" font-family="-apple-system,sans-serif">XRPL</text></svg>
+            </div>
+        </div>
+
+        <!-- WHY -->
+        <div class="section">
+            <h2>Why This Exists</h2>
+            <p>Today, cross-border payments at financial institutions move through <strong>5 separate teams and systems</strong> — compliance review, foreign exchange, route selection, payment submission, and reconciliation. Each step involves human intervention, business-hour constraints, and days of latency.</p>
+            <p>AI agents can execute these same steps in seconds — with full transparency, governance, and audit trails — while humans retain control over policies, thresholds, and signing authority.</p>
+            <p>This prototype proves it works. Real transactions. Real settlement. Real compliance screening. On a public blockchain network that settles in 3-5 seconds.</p>
+        </div>
+
+        <!-- Before / After -->
+        <div class="section">
+            <h2>Before and After</h2>
+            <div class="compare">
+                <div class="compare-card before">
+                    <h3>Today (SWIFT / Manual Process)</h3>
+                    <ul>
+                        <li>3-5 business days settlement</li>
+                        <li>$25-45 per transaction + hidden foreign exchange spreads</li>
+                        <li>Manual compliance queue (hours to days)</li>
+                        <li>No visibility until payment arrives</li>
+                        <li>Weekday business hours only</li>
+                        <li>Proof of settlement: email in 3-5 days</li>
+                        <li>5+ humans involved per payment</li>
+                    </ul>
+                </div>
+                <div class="compare-card after">
+                    <h3>With AI Agents on XRPL</h3>
+                    <ul>
+                        <li>Under 10 seconds settlement</li>
+                        <li>$0.0002 network fee, transparent rates from on-chain exchange</li>
+                        <li>Instant compliance screening (milliseconds)</li>
+                        <li>Every step visible in real-time</li>
+                        <li>24/7/365 operation</li>
+                        <li>Instant cryptographic proof (on-chain transaction hash)</li>
+                        <li>0 humans required (with governance thresholds)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- WHAT — The Agent Workflow -->
+        <div class="section">
+            <h2>What It Does — The Agent Workflow</h2>
+            <p>The prototype mirrors the exact workflow banks already follow for cross-border payments — but replaces manual steps with AI agents, each with strictly scoped permissions:</p>
+
+            <div class="flow-visual">
+                <div class="fv-node"><div class="fv-icon">&#x1F6E1;</div><div class="fv-name">Compliance</div><div class="fv-maps">Compliance team</div></div>
+                <div class="fv-arrow">&#x2192;</div>
+                <div class="fv-node"><div class="fv-icon">&#x1F4CA;</div><div class="fv-name">FX Intelligence</div><div class="fv-maps">Treasury desk</div></div>
+                <div class="fv-arrow">&#x2192;</div>
+                <div class="fv-node"><div class="fv-icon">&#x1F5FA;</div><div class="fv-name">Routing</div><div class="fv-maps">Payments ops</div></div>
+                <div class="fv-arrow">&#x2192;</div>
+                <div class="fv-node"><div class="fv-icon">&#x26A1;</div><div class="fv-name">Execution</div><div class="fv-maps">Settlement system</div></div>
+                <div class="fv-arrow">&#x2192;</div>
+                <div class="fv-node"><div class="fv-icon">&#x2705;</div><div class="fv-name">Settlement</div><div class="fv-maps">Reconciliation</div></div>
+            </div>
+
+            <p><strong>Deterministic sequencing:</strong> The five agents are invoked in this fixed order by a plain Python function (run_multi_agent_payment) running inside the web application. There is no LLM supervisor deciding the order, and no single agent performs all five steps.</p>
+
+            <p><strong>Security by design:</strong> Each agent can ONLY access its own tools. The Compliance Agent cannot execute payments. The Execution Agent cannot skip compliance. If any agent is compromised, it cannot exceed its scope — enforced today by the per-agent tool lists each agent is constructed with in application code. Externalizing that scoping to Cedar policies (Amazon Verified Permissions) is a production target and is not built in this prototype.</p>
+        </div>
+
+        <!-- WHO -->
+        <div class="section">
+            <h2>Who Would Use This</h2>
+            <p>Financial institutions and payment providers that already transact on Ripple's XRP Ledger — deploying and operating AI payment agents in their own cloud infrastructure with full custody and governance control.</p>
+
+            <div class="audience-grid">
+                <div class="audience-card">
+                    <h4>Banks &amp; FIs</h4>
+                    <p>Santander, SBI Holdings, Standard Chartered — institutions exploring digital asset rails for cross-border settlement.</p>
+                </div>
+                <div class="audience-card">
+                    <h4>Payment Providers</h4>
+                    <p>Tranglo, SBI Remit, Bitso — existing Ripple ODL partners processing high-volume remittance corridors.</p>
+                </div>
+                <div class="audience-card">
+                    <h4>Licensed Fintechs</h4>
+                    <p>Companies building next-generation payment products on XRPL who want to embed intelligent automation.</p>
+                </div>
+                <div class="audience-card">
+                    <h4>Corporate Treasury</h4>
+                    <p>Multinationals with cross-border accounts payable — replacing $45 SWIFT wires with near-zero-cost agent payments.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- HOW — Adoption Path -->
+        <div class="section">
+            <h2>How Institutions Would Adopt</h2>
+            <p>Ripple provides the settlement layer (XRPL) and developer tools (AI Starter Kit). The institution chooses their cloud, their AI model, their compliance vendor, and their custody model. This prototype shows the complete operational architecture on AWS.</p>
+
+            <div class="scope-grid">
+                <div class="scope-item">
+                    <div class="si-icon">1&#xFE0F;&#x20E3;</div>
+                    <div class="si-text"><strong>Pilot (3-6 months)</strong>Deploy in own AWS account. Connect to XRPL testnet. Integrate existing compliance vendor. Test with synthetic transactions.</div>
+                </div>
+                <div class="scope-item">
+                    <div class="si-icon">2&#xFE0F;&#x20E3;</div>
+                    <div class="si-text"><strong>Controlled Production (6-12 months)</strong>Move to XRPL mainnet with real RLUSD. Small-value payments only. Human approval for everything initially.</div>
+                </div>
+                <div class="scope-item">
+                    <div class="si-icon">3&#xFE0F;&#x20E3;</div>
+                    <div class="si-text"><strong>Scaled Operations (12-18 months)</strong>Raise agent-only thresholds. Multiple corridors live. Full audit trail integration with regulators.</div>
+                </div>
+                <div class="scope-item">
+                    <div class="si-icon">&#x1F3AF;</div>
+                    <div class="si-text"><strong>Key Principle</strong>Humans set policies and thresholds. Agents execute within those boundaries. Authority stays with the institution — speed comes from the agents.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Prototype Scope -->
+        <div class="section">
+            <h2>Prototype Scope</h2>
+            <p>This is a working demonstration — not a production system. It proves the concept is technically viable and shows what the full experience looks like.</p>
+            <div class="scope-grid">
+                <div class="scope-item">
+                    <div class="si-icon">&#x2705;</div>
+                    <div class="si-text"><strong>Working</strong>Real XRPL testnet transactions, 5 AI agents on Amazon Bedrock, sanctions screening, real-time streaming UI, settlement proof</div>
+                </div>
+                <div class="scope-item">
+                    <div class="si-icon">&#x1F6A7;</div>
+                    <div class="si-text"><strong>Production Roadmap</strong>HSM signing (AWS KMS), immutable audit trail, human approval gates, Cedar policy scoping (Verified Permissions), managed agent runtime, mainnet deployment, regulatory licensing</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CTA -->
+        <div class="cta">
+            <p style="font-size:14px;color:var(--text-muted);margin-bottom:16px;">Ready to see it in action?</p>
+            <a href="/payments">Execute a Payment &#x2192;</a>
+        </div>
+    </div>
+</body>
+</html>

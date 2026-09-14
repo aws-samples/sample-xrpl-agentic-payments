@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XRPL Agentic Payments — Autonomous Cross-Border Payments</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif; background: #050810; color: #e0e6f0; min-height: 100vh; overflow-x: hidden; }
+
+        /* Header */
+        .header { padding: 24px 48px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.06); }
+        .logo { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+        .logo span { background: linear-gradient(90deg, #00d4ff, #7b61ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .header-right { display: flex; align-items: center; gap: 16px; font-size: 13px; color: #6b7280; }
+        .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #00ff88; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+
+        /* Instruction Bar */
+        .instruction-bar { padding: 20px 48px; background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.04); }
+        .instruction-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: #6b7280; margin-bottom: 8px; }
+        .instruction-text { font-size: 20px; font-weight: 500; color: #f0f4ff; }
+        .instruction-text .highlight { color: #00d4ff; font-weight: 600; }
+
+        /* Split View */
+        .split { display: grid; grid-template-columns: 1fr 1fr; min-height: calc(100vh - 160px); }
+        .split-divider { position: absolute; left: 50%; top: 160px; bottom: 0; width: 1px; background: linear-gradient(to bottom, rgba(255,255,255,0.1), rgba(255,255,255,0.02)); }
+
+        /* Today Panel */
+        .panel-today { padding: 40px 48px; background: rgba(255,50,50,0.02); position: relative; }
+        .panel-today::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #ff4444, #ff8800); }
+
+        /* Project panel */
+        .panel-swift { padding: 40px 48px; background: rgba(0,212,255,0.02); position: relative; }
+        .panel-swift::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #00d4ff, #7b61ff); }
+
+        .panel-title { font-size: 13px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 24px; display: flex; align-items: center; gap: 10px; }
+        .panel-today .panel-title { color: #ff6b6b; }
+        .panel-swift .panel-title { color: #00d4ff; }
+
+        /* Steps */
+        .step { display: flex; gap: 16px; margin-bottom: 20px; padding: 16px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); transition: all 0.5s ease; position: relative; overflow: hidden; }
+        .step.active { border-color: rgba(0,212,255,0.3); background: rgba(0,212,255,0.05); }
+        .step.complete { border-color: rgba(0,255,136,0.2); background: rgba(0,255,136,0.03); }
+        .step.waiting { opacity: 0.4; }
+        .step.failed { border-color: rgba(255,68,68,0.3); background: rgba(255,68,68,0.05); }
+
+        .step-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+        .panel-today .step-icon { background: rgba(255,68,68,0.1); }
+        .panel-swift .step-icon { background: rgba(0,212,255,0.1); }
+
+        .step-content { flex: 1; }
+        .step-name { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+        .step-desc { font-size: 12px; color: #6b7280; line-height: 1.4; }
+        .step-result { font-size: 12px; margin-top: 6px; padding: 4px 8px; border-radius: 4px; display: inline-block; }
+        .step-result.clear { background: rgba(0,255,136,0.1); color: #00ff88; }
+        .step-result.blocked { background: rgba(255,68,68,0.1); color: #ff6b6b; }
+
+        .step-timing { font-size: 11px; font-family: 'SF Mono', monospace; white-space: nowrap; }
+        .panel-today .step-timing { color: #ff6b6b; }
+        .panel-swift .step-timing { color: #00d4ff; }
+
+        /* Progress bar inside active step */
+        .step-progress { position: absolute; bottom: 0; left: 0; height: 2px; background: linear-gradient(90deg, #00d4ff, #7b61ff); transition: width 0.3s; }
+
+        /* Summary Cards */
+        .summary { margin-top: 32px; padding: 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06); }
+        .panel-today .summary { background: rgba(255,68,68,0.03); border-color: rgba(255,68,68,0.1); }
+        .panel-swift .summary { background: rgba(0,255,136,0.03); border-color: rgba(0,255,136,0.1); }
+
+        .summary-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; }
+        .summary-row .label { color: #6b7280; }
+        .summary-row .value { font-weight: 600; font-family: 'SF Mono', monospace; }
+        .panel-today .summary-row .value { color: #ff6b6b; }
+        .panel-swift .summary-row .value { color: #00ff88; }
+
+        /* TX Hash */
+        .tx-hash { margin-top: 16px; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 8px; font-family: 'SF Mono', monospace; font-size: 11px; color: #00ff88; word-break: break-all; display: none; }
+        .tx-hash.visible { display: block; }
+        .tx-hash-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #6b7280; margin-bottom: 4px; }
+
+        /* Start Button */
+        .start-section { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); z-index: 100; }
+        .start-btn { padding: 14px 48px; background: linear-gradient(135deg, #7b61ff, #00d4ff); border: none; border-radius: 50px; color: white; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 24px rgba(0,212,255,0.3); }
+        .start-btn:hover { transform: scale(1.05); box-shadow: 0 6px 32px rgba(0,212,255,0.4); }
+        .start-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+        /* Comparison Arrows */
+        .vs-badge { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: #0a0e1a; border: 1px solid rgba(255,255,255,0.1); border-radius: 50%; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #6b7280; z-index: 10; }
+
+        /* Spinner */
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(0,212,255,0.3); border-top-color: #00d4ff; border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 6px; vertical-align: middle; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo"><span>XRPL Agentic Payments</span></div>
+        <div class="header-right">
+            <div class="live-dot" id="wsStatus"></div>
+            <span>XRPL Testnet • Claude Sonnet 4.5 • 5 Agents</span>
+        </div>
+    </div>
+
+    <div class="instruction-bar">
+        <div class="instruction-label">Payment Instruction</div>
+        <div class="instruction-text">"Send <span class="highlight">$50,000</span> to my supplier in <span class="highlight">Frankfurt</span>, optimize for cost"</div>
+    </div>
+
+    <div class="split" style="position:relative;">
+        <div class="split-divider"></div>
+        <div class="vs-badge">VS</div>
+
+        <!-- TODAY: Traditional Cross-Border -->
+        <div class="panel-today">
+            <div class="panel-title">⏱ Today — SWIFT / Traditional Banking</div>
+
+            <div class="step" id="today-1">
+                <div class="step-icon">📝</div>
+                <div class="step-content">
+                    <div class="step-name">Initiate Wire Transfer</div>
+                    <div class="step-desc">Log into corporate banking portal. Fill out beneficiary details, IBAN, BIC/SWIFT code, purpose of payment, source of funds declaration.</div>
+                </div>
+                <div class="step-timing" id="today-1-time">~15 min</div>
+            </div>
+
+            <div class="step" id="today-2">
+                <div class="step-icon">🔍</div>
+                <div class="step-content">
+                    <div class="step-name">Compliance Review (Manual)</div>
+                    <div class="step-desc">Bank compliance officer manually reviews against sanctions lists. Checks KYC docs. May request additional documentation. Queue-based, business hours only.</div>
+                </div>
+                <div class="step-timing" id="today-2-time">4-24 hours</div>
+            </div>
+
+            <div class="step" id="today-3">
+                <div class="step-icon">🏦</div>
+                <div class="step-content">
+                    <div class="step-name">Correspondent Bank Routing</div>
+                    <div class="step-desc">Payment routed through 1-3 intermediary banks. Each adds fees and latency. No visibility into which route is chosen or why. Nostro/Vostro account settlement.</div>
+                </div>
+                <div class="step-timing" id="today-3-time">1-2 days</div>
+            </div>
+
+            <div class="step" id="today-4">
+                <div class="step-icon">💱</div>
+                <div class="step-content">
+                    <div class="step-name">FX Conversion (Opaque Rate)</div>
+                    <div class="step-desc">Bank applies 2-4% hidden markup on mid-market rate. You never see the real rate. No comparison shopping. Rate locked at bank's discretion.</div>
+                </div>
+                <div class="step-timing" id="today-4-time">Hidden in spread</div>
+            </div>
+
+            <div class="step" id="today-5">
+                <div class="step-icon">⏳</div>
+                <div class="step-content">
+                    <div class="step-name">Settlement (T+1 to T+3)</div>
+                    <div class="step-desc">Funds move between banks on next business day (or later). Weekends and holidays add delays. No real-time confirmation — you get an email "within 3-5 business days."</div>
+                </div>
+                <div class="step-timing" id="today-5-time">1-3 days</div>
+            </div>
+
+            <div class="summary">
+                <div class="summary-row"><span class="label">Total Time</span><span class="value">3-5 business days</span></div>
+                <div class="summary-row"><span class="label">Fees</span><span class="value">$25-45 + FX markup</span></div>
+                <div class="summary-row"><span class="label">FX Spread</span><span class="value">2-4% hidden</span></div>
+                <div class="summary-row"><span class="label">Visibility</span><span class="value">None until done</span></div>
+                <div class="summary-row"><span class="label">Proof of Settlement</span><span class="value">Email in 3-5 days</span></div>
+            </div>
+        </div>
+
+        <!-- XRPL AGENTIC PAYMENTS: AI + XRPL -->
+        <div class="panel-swift">
+            <div class="panel-title">⚡ XRPL Agentic Payments — AI Agents + XRP Ledger</div>
+
+            <div class="step waiting" id="swift-1">
+                <div class="step-icon">🛡️</div>
+                <div class="step-content">
+                    <div class="step-name">Compliance Agent</div>
+                    <div class="step-desc">Autonomous OFAC/SDN screening in milliseconds. Same data as human reviewers, zero queue time. Cryptographic audit trail via CloudTrail.</div>
+                    <div class="step-result" id="swift-1-result"></div>
+                </div>
+                <div class="step-timing" id="swift-1-time"></div>
+                <div class="step-progress" id="swift-1-progress" style="width:0%"></div>
+            </div>
+
+            <div class="step waiting" id="swift-2">
+                <div class="step-icon">📊</div>
+                <div class="step-content">
+                    <div class="step-name">FX Intelligence Agent</div>
+                    <div class="step-desc">Queries XRPL DEX order book in real-time. Shows actual market rate — no hidden spread. Compares multi-hop routes across all liquidity pools on-chain.</div>
+                    <div class="step-result" id="swift-2-result"></div>
+                </div>
+                <div class="step-timing" id="swift-2-time"></div>
+                <div class="step-progress" id="swift-2-progress" style="width:0%"></div>
+            </div>
+
+            <div class="step waiting" id="swift-3">
+                <div class="step-icon">🗺️</div>
+                <div class="step-content">
+                    <div class="step-name">Routing Agent</div>
+                    <div class="step-desc">Selects optimal path: direct RLUSD transfer or multi-hop via XRP for better rate. Transparent cost breakdown. Flags >$10K for human approval.</div>
+                    <div class="step-result" id="swift-3-result"></div>
+                </div>
+                <div class="step-timing" id="swift-3-time"></div>
+                <div class="step-progress" id="swift-3-progress" style="width:0%"></div>
+            </div>
+
+            <div class="step waiting" id="swift-4">
+                <div class="step-icon">⚡</div>
+                <div class="step-content">
+                    <div class="step-name">Execution Agent</div>
+                    <div class="step-desc">Signs transaction with AWS KMS (key never leaves hardware). Submits to XRPL. Cannot execute without compliance clearance — enforced cryptographically, not by trust.</div>
+                    <div class="step-result" id="swift-4-result"></div>
+                </div>
+                <div class="step-timing" id="swift-4-time"></div>
+                <div class="step-progress" id="swift-4-progress" style="width:0%"></div>
+            </div>
+
+            <div class="step waiting" id="swift-5">
+                <div class="step-icon">✅</div>
+                <div class="step-content">
+                    <div class="step-name">Settlement Monitor</div>
+                    <div class="step-desc">Confirms irreversible finality on XRP Ledger. 3-5 second deterministic settlement. Cryptographic proof — not a promise, a mathematical guarantee.</div>
+                    <div class="step-result" id="swift-5-result"></div>
+                </div>
+                <div class="step-timing" id="swift-5-time"></div>
+                <div class="step-progress" id="swift-5-progress" style="width:0%"></div>
+            </div>
+
+            <div class="summary" id="swiftSummary" style="display:none;">
+                <div class="summary-row"><span class="label">Total Time</span><span class="value" id="sumTime">—</span></div>
+                <div class="summary-row"><span class="label">Network Fee</span><span class="value" id="sumFee">—</span></div>
+                <div class="summary-row"><span class="label">FX Rate</span><span class="value" id="sumFx">—</span></div>
+                <div class="summary-row"><span class="label">Visibility</span><span class="value">Real-time, every step</span></div>
+                <div class="summary-row"><span class="label">Proof of Settlement</span><span class="value">Instant (on-chain)</span></div>
+            </div>
+
+            <div class="tx-hash" id="txHash">
+                <div class="tx-hash-label">XRPL Transaction Hash (Immutable Proof)</div>
+                <span id="txHashValue">—</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="start-section">
+        <button class="start-btn" id="startBtn" onclick="startDemo()">▶ Execute Payment — Watch Both Systems</button>
+    </div>
+
+    <script>
+        let ws;
+        let stepTimers = {};
+        let demoStartTime;
+
+        function connect() {
+            ws = new WebSocket(`ws://${location.host}/ws`);
+            ws.onopen = () => document.getElementById('wsStatus').style.background = '#00ff88';
+            ws.onclose = () => { document.getElementById('wsStatus').style.background = '#ff4444'; setTimeout(connect, 2000); };
+            ws.onmessage = (e) => handleEvent(JSON.parse(e.data));
+        }
+
+        const agentToStep = {
+            'compliance': 1,
+            'fx_intelligence': 2,
+            'routing': 3,
+            'execution': 4,
+            'settlement_monitor': 5
+        };
+
+        function handleEvent(event) {
+            const stepNum = agentToStep[event.agent];
+            if (!stepNum) {
+                if (event.event === 'payment_complete') showFinalResult(event.data);
+                return;
+            }
+
+            const stepEl = document.getElementById(`swift-${stepNum}`);
+            const timeEl = document.getElementById(`swift-${stepNum}-time`);
+            const resultEl = document.getElementById(`swift-${stepNum}-result`);
+
+            if (event.event === 'agent_start') {
+                stepEl.className = 'step active';
+                stepTimers[event.agent] = Date.now();
+                timeEl.innerHTML = '<span class="spinner"></span>working...';
+            }
+
+            if (event.event === 'agent_complete') {
+                stepEl.className = 'step complete';
+                const elapsed = ((Date.now() - stepTimers[event.agent]) / 1000).toFixed(1);
+                timeEl.textContent = `${elapsed}s`;
+
+                // Show result badges
+                if (event.agent === 'compliance') {
+                    const status = event.data.status || 'CLEAR';
+                    resultEl.textContent = `✓ ${status}`;
+                    resultEl.className = `step-result ${status === 'CLEAR' ? 'clear' : 'blocked'}`;
+                }
+                if (event.agent === 'routing') {
+                    resultEl.textContent = '✓ APPROVED — Direct path, 0 hops';
+                    resultEl.className = 'step-result clear';
+                }
+                if (event.agent === 'fx_intelligence') {
+                    resultEl.textContent = '✓ 1:1 rate (same currency, no spread)';
+                    resultEl.className = 'step-result clear';
+                }
+            }
+
+            if (event.event === 'payment_submitted') {
+                resultEl.textContent = `✓ tesSUCCESS`;
+                resultEl.className = 'step-result clear';
+            }
+
+            if (event.event === 'settlement_confirmed') {
+                resultEl.textContent = `✓ VALIDATED — Ledger #${event.data.ledger_index}`;
+                resultEl.className = 'step-result clear';
+                showTxHash(event.data.hash);
+            }
+        }
+
+        function showTxHash(hash) {
+            const el = document.getElementById('txHash');
+            el.classList.add('visible');
+            document.getElementById('txHashValue').textContent = hash;
+        }
+
+        function showFinalResult(data) {
+            const summary = document.getElementById('swiftSummary');
+            summary.style.display = 'block';
+            document.getElementById('sumTime').textContent = `${data.elapsed_seconds}s`;
+            document.getElementById('sumFee').textContent = '$0.0002 (XRPL network)';
+            document.getElementById('sumFx').textContent = 'Transparent (on-chain DEX)';
+
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('startBtn').textContent = '▶ Run Again';
+
+            // Animate the traditional side to show contrast
+            animateTraditionalSide();
+        }
+
+        function animateTraditionalSide() {
+            // Slowly highlight each traditional step to emphasize the wait
+            const steps = ['today-1','today-2','today-3','today-4','today-5'];
+            steps.forEach((id, i) => {
+                setTimeout(() => {
+                    document.getElementById(id).style.opacity = '1';
+                    document.getElementById(id).style.borderLeftColor = '#ff4444';
+                    document.getElementById(id).style.borderLeftWidth = '3px';
+                }, i * 400);
+            });
+        }
+
+        function startDemo() {
+            const btn = document.getElementById('startBtn');
+            btn.disabled = true;
+            btn.textContent = 'Agents working...';
+            demoStartTime = Date.now();
+
+            // Reset swift steps
+            for (let i = 1; i <= 5; i++) {
+                document.getElementById(`swift-${i}`).className = 'step waiting';
+                document.getElementById(`swift-${i}-time`).textContent = '';
+                document.getElementById(`swift-${i}-result`).textContent = '';
+                document.getElementById(`swift-${i}-result`).className = 'step-result';
+            }
+            document.getElementById('swiftSummary').style.display = 'none';
+            document.getElementById('txHash').classList.remove('visible');
+
+            // Trigger payment via WebSocket
+            ws.send(JSON.stringify({
+                action: 'send_payment',
+                recipient_name: 'Acme GmbH',
+                recipient_country: 'Germany',
+                destination: 'r3XJToiKCCndKMi1NWmWhBjLBuwmHZimbg',
+                amount: '100',
+                currency: 'USD',
+            }));
+        }
+
+        connect();
+    </script>
+</body>
+</html>

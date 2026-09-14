@@ -1,0 +1,12 @@
+*.js
+!jest.config.js
+*.d.ts
+node_modules
+
+# CDK asset staging directory
+.cdk.staging
+cdk.out
+
+# CDK context cache — contains account IDs, hosted zone lookups, and other
+# environment-specific values resolved at synth time. Regenerated automatically.
+cdk.context.json
