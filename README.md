@@ -249,6 +249,53 @@ those three you deploy to — deploying outside them needs model access and an
 inference profile for that region, and AgentCore Runtime, Gateway, Memory,
 and Policy available there too.
 
+### Installing the prerequisites
+
+macOS (Homebrew):
+
+```bash
+brew install python@3.13 node awscli
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Linux (Debian/Ubuntu):
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs python3.13
+
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
+unzip awscliv2.zip && sudo ./aws/install
+```
+
+Windows: install [Python 3.13](https://www.python.org/downloads/),
+[Node.js 22 LTS](https://nodejs.org/), [`uv`](https://docs.astral.sh/uv/getting-started/installation/),
+and [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+from their official installers.
+
+`npm` ships with Node.js; there's nothing to install separately. `boto3` is a
+Python dependency of this project, not a system tool — `uv sync --extra dev`
+(Quickstart Level 1) installs it automatically.
+
+For full deployment, also authenticate the AWS CLI once:
+
+```bash
+aws configure sso   # or: aws configure, for long-lived access keys
+aws sts get-caller-identity   # confirms it can authenticate
+```
+
+Confirm versions:
+
+```bash
+python3 --version  # 3.13.x
+node --version      # v22.12.0 or newer
+npm --version
+uv --version
+aws --version       # aws-cli/2.x
+```
+
 ## Deployment reference
 
 Detail behind Quickstart Level 3's commands.

@@ -70,7 +70,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       <header className="topbar">
         <Link className="brand" href="/">
           <span className="brand-mark">X</span>
-          AgentSwift
+          XRPL Agentic Payments
         </Link>
         <nav>
           <Link href="/">Transfer</Link>

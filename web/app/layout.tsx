@@ -3,7 +3,7 @@ import "./globals.css";
 import { AppProviders } from "./providers";
 
 export const metadata: Metadata = {
-  title: "AgentSwift XRPL Transfer",
+  title: "XRPL Agentic Payments",
   description: "AgentCore and XRPL Testnet cross-border transfer POC",
 };
 
