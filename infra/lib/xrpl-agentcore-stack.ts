@@ -4,6 +4,7 @@ import {
   CfnCondition,
   CfnOutput,
   CfnParameter,
+  CfnResource,
   Duration,
   Fn,
   RemovalPolicy,
@@ -842,9 +843,12 @@ export class XrplAgentCoreStack extends Stack {
         AGENTCORE_MEMORY_ID: preferenceMemory.memoryId,
         ALLOW_DEMO_AUTH: "false",
       },
-      // Runtime tracing delivery resources cannot safely reference a Runtime
-      // omitted by the first phase of the image bootstrap deployment.
-      tracingEnabled: false,
+      // Spans land in this Runtime's own log group
+      // (/aws/bedrock-agentcore/runtimes/<id>-DEFAULT); metrics/traces need the
+      // one-time account setup in scripts/enable_observability.sh first, or
+      // the CloudWatch GenAI Observability dashboard stays empty regardless of
+      // this flag. See docs/deployment.md#observability.
+      tracingEnabled: true,
       lifecycleConfiguration: {
         idleRuntimeSessionTimeout: Duration.minutes(15),
         maxLifetime: Duration.hours(8),
@@ -853,11 +857,100 @@ export class XrplAgentCoreStack extends Stack {
     const runtimeEndpoint = runtime.addEndpoint("default", {
       description: "Production-like Cognito-authorized AG-UI endpoint",
     });
-    const cfnRuntime = runtime.node.defaultChild as agentcore.CfnRuntime;
-    cfnRuntime.cfnOptions.condition = deployAgentRuntimeCondition;
-    const cfnRuntimeEndpoint =
-      runtimeEndpoint.node.defaultChild as agentcore.CfnRuntimeEndpoint;
-    cfnRuntimeEndpoint.cfnOptions.condition = deployAgentRuntimeCondition;
+    // tracingEnabled adds delivery resources referencing the Runtime's ARN, so
+    // every CFN resource under it — the Runtime, its endpoint, and those
+    // delivery resources alike — must share the same condition: none of them
+    // can exist while the first bootstrap phase omits the Runtime itself.
+    for (const child of runtime.node.findAll()) {
+      if (child instanceof CfnResource) {
+        child.cfnOptions.condition = deployAgentRuntimeCondition;
+      }
+    }
+    // configureTracingDelivery also creates one stack-level X-Ray resource
+    // policy, deduplicated by construct ID rather than scoped under the
+    // Runtime — findAll() above never sees it, so it needs the same
+    // condition applied separately. Its policy document embeds this
+    // Runtime's ARN; safe only because this is the sole traced Runtime in
+    // the stack — revisit if a second one is ever added here.
+    const xrayDeliveryPolicy = this.node.tryFindChild(
+      "CdkXRayLogsDeliveryPolicy",
+    );
+    for (const child of xrayDeliveryPolicy?.node.findAll() ?? []) {
+      if (child instanceof CfnResource) {
+        child.cfnOptions.condition = deployAgentRuntimeCondition;
+      }
+    }
+
+    // Gateway and Memory don't have a tracingEnabled shortcut like Runtime —
+    // AgentCore doesn't configure their log or trace destinations by default,
+    // so both are wired up explicitly: one shared X-Ray destination (traces
+    // aren't resource-specific), plus a dedicated CloudWatch log group each.
+    // Same one-time account setup applies: see
+    // scripts/enable_observability.sh and docs/deployment.md#observability.
+    const tracesDestination = new logs.CfnDeliveryDestination(
+      this,
+      "TracesDestination",
+      {
+        name: `${this.stackName}-traces-destination`,
+        deliveryDestinationType: "XRAY",
+      },
+    );
+    const enableResourceObservability = (
+      id: string,
+      resourceArn: string,
+      logGroup: logs.LogGroup,
+    ): void => {
+      const logsSource = new logs.CfnDeliverySource(this, `${id}LogsSource`, {
+        name: `${this.stackName}-${id.toLowerCase()}-logs-source`,
+        logType: "APPLICATION_LOGS",
+        resourceArn,
+      });
+      const logsDestination = new logs.CfnDeliveryDestination(
+        this,
+        `${id}LogsDestination`,
+        {
+          name: `${this.stackName}-${id.toLowerCase()}-logs-destination`,
+          deliveryDestinationType: "CWL",
+          destinationResourceArn: logGroup.logGroupArn,
+        },
+      );
+      new logs.CfnDelivery(this, `${id}LogsDelivery`, {
+        deliverySourceName: logsSource.name,
+        deliveryDestinationArn: logsDestination.attrArn,
+      });
+
+      const tracesSource = new logs.CfnDeliverySource(
+        this,
+        `${id}TracesSource`,
+        {
+          name: `${this.stackName}-${id.toLowerCase()}-traces-source`,
+          logType: "TRACES",
+          resourceArn,
+        },
+      );
+      new logs.CfnDelivery(this, `${id}TracesDelivery`, {
+        deliverySourceName: tracesSource.name,
+        deliveryDestinationArn: tracesDestination.attrArn,
+      });
+    };
+
+    const gatewayLogGroup = new logs.LogGroup(this, "GatewayLogGroup", {
+      logGroupName: `/aws/vendedlogs/bedrock-agentcore/gateway/APPLICATION_LOGS/${gateway.gatewayId}`,
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    enableResourceObservability("Gateway", gateway.gatewayArn, gatewayLogGroup);
+
+    const memoryLogGroup = new logs.LogGroup(this, "MemoryLogGroup", {
+      logGroupName: `/aws/vendedlogs/bedrock-agentcore/memory/APPLICATION_LOGS/${preferenceMemory.memoryId}`,
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+    enableResourceObservability(
+      "Memory",
+      preferenceMemory.memoryArn,
+      memoryLogGroup,
+    );
 
     const runtimePrincipal =
       `arn:aws:sts::${this.account}:assumed-role/${runtimeRole.roleName}`;
@@ -915,6 +1008,12 @@ export class XrplAgentCoreStack extends Stack {
     runtimeEndpointOutput.condition = deployAgentRuntimeCondition;
     new CfnOutput(this, "PreferenceMemoryId", {
       value: preferenceMemory.memoryId,
+    });
+    new CfnOutput(this, "GatewayLogGroupName", {
+      value: gatewayLogGroup.logGroupName,
+    });
+    new CfnOutput(this, "MemoryLogGroupName", {
+      value: memoryLogGroup.logGroupName,
     });
   }
 }
