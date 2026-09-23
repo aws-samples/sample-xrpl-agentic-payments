@@ -24,6 +24,10 @@ payment.
 
 _Regenerate with `pip install -r diagrams/requirements.txt && python3 diagrams/render_architecture.py` (icons: see [`diagrams/icons/SOURCE.md`](diagrams/icons/SOURCE.md))._
 
+![Control-flow sequence across trust boundaries](docs/assets/sequence.png)
+
+_Same numbered steps as the diagram above, laid out as a sequence with the trust boundaries as swimlanes. Mermaid source and regenerate command: [`docs/sequence.md`](docs/sequence.md)._
+
 ## Quickstart
 
 There are three levels of testing. Each one adds more of the real system. Levels 1
@@ -160,6 +164,80 @@ A real chat additionally needs AWS credentials, `AGENTCORE_GATEWAY_URL`,
 Bedrock model access, and the deployed Gateway targets — Quickstart Level 3
 sets all of that up.
 
+## Demo walkthrough
+
+Example prompts to paste into the assistant, and what each stage of
+Quickstart Level 3 actually looks like.
+
+### Example prompts
+
+- `What corridors are available for a transfer right now?`
+- `Quote exactly 5 MXN from the usd-mxn-testnet corridor for direct XRPL wallet payout to <recipient-address>. The recipient is Demo Recipient in MX, with 100 bps maximum slippage and no destination tag. Return the structured quote only; do not create a transfer intent until I confirm.`
+- `Quote exactly 10 MXN from the usd-mxn-testnet corridor for simulated local-fiat payout using payout alias fixture-bank-token. The recipient is Demo Recipient in MX, with 100 bps maximum slippage.`
+- `That quote looks right — create the transfer intent.`
+- `What's the status of transfer tr_<paste-the-id-from-the-approval-card>?`
+- `Just go ahead and approve and execute that transfer for me.` — the assistant has no approve/sign tool at all, so it refuses and points at the approval card instead.
+
+`<recipient-address>` is `NEXT_PUBLIC_DEMO_RECIPIENT_ADDRESS` in `web/.env.local`,
+written by `write_web_env.py` (see [Deployment reference](#deployment-reference)).
+
+### Sign in
+
+![Cognito sign-in](docs/assets/screenshots/CognitoUserLoginPage.png)
+
+Cognito user pool, no self-service sign-up — `create_poc_user.sh` provisions
+the demo account.
+
+### Ask for a quote
+
+![Assistant returns a structured quote card](docs/assets/screenshots/TransferAssistant1.png)
+
+The model calls the `quote` tool and renders an application-owned card —
+corridor, source estimate, bounded `SendMax`, and the x402 fee — never raw
+model output. This one used the **Direct wallet** one-click starter (5 MXN,
+direct XRPL wallet delivery).
+
+### Quotes expire and refresh cleanly
+
+![A refreshed quote gets its own quote ID](docs/assets/screenshots/GetNewQuote.png)
+
+Every quote expires (2 minutes here) and refreshing gets an independent
+quote ID — the "refresh-safe workflow" property called out on the landing
+page.
+
+### Create the intent — the model hands off immediately
+
+![Transfer intent created, awaiting approval](docs/assets/screenshots/TransferIntentSuccessfullyCreated.png)
+
+The assistant creates the `AWAITING_APPROVAL` intent, then states plainly
+that it cannot approve or execute it — approval has to happen through the
+application's authenticated approval card, not the chat.
+
+### A human approves — outside the model's control
+
+![Approval card with every binding term](docs/assets/screenshots/WaitingForHumanApproval.png)
+
+Every term the approval binds — recipient wallet, asset issuers, the x402
+fee recipient, quote expiry, and a SHA-256 approval commitment — is on the
+card. **Approve and execute** calls the authenticated REST API directly;
+the model is not in this path at all.
+
+### Settlement, with links to the ledger
+
+![Status stepper reaches Completed, with fee and transfer links](docs/assets/screenshots/TestNetID.png)
+
+The card walks through `Fee Paid` → `Submitted` → `Settled` → `Completed`,
+linking both the x402 fee and the transfer payment to their XRPL Testnet
+transactions.
+
+### Independently verifiable on XRPL Testnet
+
+![XRPL Testnet Explorer showing the settled x402 fee transaction](docs/assets/screenshots/TestNetCTID.png)
+
+Following either link opens the public XRPL Testnet Explorer — proof the
+transaction actually settled on-ledger, independent of anything this
+application says about it.
+
 ## What the sample includes
 
 - Native AG-UI AgentCore Runtime with `POST /invocations`, `GET /ping`, SSE,
@@ -184,14 +262,14 @@ sets all of that up.
 
 ```text
 Browser -> Next.js AG-UI BFF ------> AgentCore Runtime -> Gateway + Policy
-   |                                                        |
+   |                                                         |
    +-> authenticated REST API -> DynamoDB outbox             |
                                   |                          |
                                   v                          |
                             Step Functions                   |
                              |          |                    |
                              v          v                    |
-                          Signer     Reconciler --------------+
+                          Signer     Reconciler -------------+
                              |          |
                              +-----> XRPL Testnet
 ```
@@ -248,6 +326,53 @@ out only to `us-east-1`, `us-east-2`, and `us-west-2` regardless of which of
 those three you deploy to — deploying outside them needs model access and an
 inference profile for that region, and AgentCore Runtime, Gateway, Memory,
 and Policy available there too.
+
+### Installing the prerequisites
+
+macOS (Homebrew):
+
+```bash
+brew install python@3.13 node awscli
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Linux (Debian/Ubuntu):
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs python3.13
+
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
+unzip awscliv2.zip && sudo ./aws/install
+```
+
+Windows: install [Python 3.13](https://www.python.org/downloads/),
+[Node.js 22 LTS](https://nodejs.org/), [`uv`](https://docs.astral.sh/uv/getting-started/installation/),
+and [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
+from their official installers.
+
+`npm` ships with Node.js; there's nothing to install separately. `boto3` is a
+Python dependency of this project, not a system tool — `uv sync --extra dev`
+(Quickstart Level 1) installs it automatically.
+
+For full deployment, also authenticate the AWS CLI once:
+
+```bash
+aws configure sso   # or: aws configure, for long-lived access keys
+aws sts get-caller-identity   # confirms it can authenticate
+```
+
+Confirm versions:
+
+```bash
+python3 --version  # 3.13.x
+node --version      # v22.12.0 or newer
+npm --version
+uv --version
+aws --version       # aws-cli/2.x
+```
 
 ## Deployment reference
 
