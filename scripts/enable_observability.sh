@@ -52,9 +52,18 @@ aws logs put-resource-policy \
   --policy-name "AgentCoreTransactionSearchXRayAccess" \
   --policy-document "${policy_document}" >/dev/null
 
-aws xray update-trace-segment-destination \
-  --region "${region}" \
-  --destination CloudWatchLogs >/dev/null
+# update-trace-segment-destination errors if already at the target value
+# (unlike put-resource-policy above, it isn't a true PUT), so check first —
+# this may already be done, whether by an earlier run of this script or by
+# hand in the console.
+current_destination="$(
+  aws xray get-trace-segment-destination --region "${region}" --query Destination --output text
+)"
+if [[ "${current_destination}" != "CloudWatchLogs" ]]; then
+  aws xray update-trace-segment-destination \
+    --region "${region}" \
+    --destination CloudWatchLogs >/dev/null
+fi
 
 echo "CloudWatch Transaction Search enabled for account ${account_id} in ${region}."
 echo "Traces from AgentCore Runtime, Gateway, and Memory now land in CloudWatch."
