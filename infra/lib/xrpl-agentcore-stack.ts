@@ -59,9 +59,13 @@ export class XrplAgentCoreStack extends Stack {
   ) {
     super(scope, id, props);
 
-    if (this.region !== "us-west-2") {
+    if (!["us-east-1", "us-east-2", "us-west-2"].includes(this.region)) {
       Annotations.of(this).addWarning(
-        "The supported default POC deployment region is us-west-2.",
+        "This stack invokes Claude Sonnet 4.5 through the 'us.' cross-region " +
+          "inference profile, which fans out only to us-east-1, us-east-2, " +
+          "and us-west-2. Deploying elsewhere needs Bedrock model access and " +
+          "an inference profile for this region, and AgentCore Runtime, " +
+          "Gateway, Memory, and Policy available here too.",
       );
     }
 

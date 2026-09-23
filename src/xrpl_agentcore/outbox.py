@@ -21,7 +21,7 @@ def lambda_handler(event: dict[str, Any], _context: Any) -> dict[str, int]:
     state_machine_arn = os.environ["TRANSFER_STATE_MACHINE_ARN"]
     client = boto3.client(
         "stepfunctions",
-        region_name=os.environ.get("AWS_DEFAULT_REGION", "us-west-2"),
+        region_name=os.environ["AWS_DEFAULT_REGION"],
     )
     started = 0
     for record in event.get("Records", []):

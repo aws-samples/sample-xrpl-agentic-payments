@@ -55,7 +55,7 @@ def configured_services() -> AppServices:
     if table_name:
         table = boto3.resource(
             "dynamodb",
-            region_name=os.environ.get("AWS_DEFAULT_REGION", "us-west-2"),
+            region_name=os.environ["AWS_DEFAULT_REGION"],
         ).Table(table_name)
         repository: TransferRepository = DynamoTransferRepository(table)
     else:

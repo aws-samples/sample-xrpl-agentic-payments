@@ -4,12 +4,16 @@
 
 _Regenerate with `pip install -r diagrams/requirements.txt && python3 diagrams/render_architecture.py` (icons: see [`diagrams/icons/SOURCE.md`](../diagrams/icons/SOURCE.md))._
 
-[Standalone ASCII architecture](architecture-ascii.md)
+[Standalone ASCII architecture](architecture-ascii.md) · [Control-flow sequence, with trust-boundary swimlanes](sequence.md)
 
 The POC separates conversation, durable authorization, signing, settlement
 verification, and payout finalization. An LLM can help a user discover a
-corridor, obtain a quote, create an intent, and read status. It cannot approve
-or execute a transfer.
+[corridor](https://en.wikipedia.org/wiki/Remittance) — the remittance-industry
+term for a fixed source-currency → destination-currency route, such as
+USD→MXN — obtain a quote, create an intent, and read status. It cannot
+approve or execute a transfer. Each corridor in `config/corridors.json` pins a
+specific pair of XRPL issuers and a demo exchange rate; see `CorridorService`
+in [`src/xrpl_agentcore/services.py`](../src/xrpl_agentcore/services.py).
 
 ```text
 Browser
@@ -26,6 +30,14 @@ AgentCore Gateway + Policy             │                Signer   Reconciler
   └────────────────────────────────────┘                   ▼       ▼
                                                       XRPL Testnet
 ```
+
+The numbered sequence below is the same flow with every hop, its trust
+boundary, and the model-vs-approval split spelled out — read this first if
+the ASCII sketch above is too compressed.
+
+![Control-flow sequence across trust boundaries](assets/sequence.png)
+
+_Mermaid source and regenerate command: [`docs/sequence.md`](sequence.md)._
 
 The signer persists a deterministic signed transaction in the separately
 encrypted artifact table before broadcast. A network timeout after signing is

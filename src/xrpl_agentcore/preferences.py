@@ -37,7 +37,7 @@ class PreferenceSettings(StrictModel):
 @dataclass(frozen=True, slots=True)
 class PreferenceMemory:
     memory_id: str
-    region: str = "us-west-2"
+    region: str
 
     @classmethod
     def from_environment(cls) -> PreferenceMemory | None:
@@ -46,7 +46,7 @@ class PreferenceMemory:
             return None
         return cls(
             memory_id=memory_id,
-            region=os.environ.get("AWS_DEFAULT_REGION", "us-west-2"),
+            region=os.environ["AWS_DEFAULT_REGION"],
         )
 
     def _client(self) -> Any:

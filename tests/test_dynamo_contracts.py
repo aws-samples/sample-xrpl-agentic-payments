@@ -144,6 +144,7 @@ def test_outbox_dispatch_uses_transfer_id_as_idempotent_execution_name(
 ) -> None:
     step_functions = FakeStepFunctions()
     monkeypatch.setenv("TRANSFER_STATE_MACHINE_ARN", "arn:aws:states:test")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-west-2")
     monkeypatch.setattr(
         "xrpl_agentcore.outbox.boto3.client",
         lambda *_args, **_kwargs: step_functions,

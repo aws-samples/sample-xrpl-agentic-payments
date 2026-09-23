@@ -1,15 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-region="${AWS_DEFAULT_REGION:-us-west-2}"
+repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "${repository_root}/scripts/_env_file.sh"
+env_file="${ENV_FILE:-${repository_root}/.env}"
+
+# AWS_DEFAULT_REGION has exactly one source of truth: .env (see
+# .env.example). No hardcoded default here — matches whichever region
+# scripts/deploy.sh deployed the stack to.
+read_env_default AWS_DEFAULT_REGION "${env_file}"
+if [[ -z "${AWS_DEFAULT_REGION:-}" ]]; then
+  echo "AWS_DEFAULT_REGION is required. Set it in .env (see .env.example)." >&2
+  exit 2
+fi
+region="${AWS_DEFAULT_REGION}"
 stack_name="${STACK_NAME:-XrplAgentCorePoc}"
 email="${POC_USER_EMAIL:-}"
 password="${POC_USER_PASSWORD:-}"
 
-if [[ "${region}" != "us-west-2" ]]; then
-  echo "This POC user script supports only us-west-2." >&2
-  exit 2
-fi
 if [[ -z "${email}" || -z "${password}" ]]; then
   echo "POC_USER_EMAIL and POC_USER_PASSWORD are required." >&2
   exit 2

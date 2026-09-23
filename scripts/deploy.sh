@@ -2,14 +2,24 @@
 set -euo pipefail
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-region="${AWS_DEFAULT_REGION:-us-west-2}"
-stack_name="${STACK_NAME:-XrplAgentCorePoc}"
-image_tag="${RUNTIME_IMAGE_TAG:-$(git -C "${repository_root}" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)}"
+source "${repository_root}/scripts/_env_file.sh"
+env_file="${ENV_FILE:-${repository_root}/.env}"
 
-if [[ "${region}" != "us-west-2" ]]; then
-  echo "This POC deploy script supports only us-west-2." >&2
+# AWS_DEFAULT_REGION has exactly one source of truth: .env (see
+# .env.example). No hardcoded default here — the deploying user's choice.
+# Bedrock model access here is via the "us." cross-region inference profile
+# (fans out to us-east-1, us-east-2, us-west-2 regardless of which of those
+# three you deploy to), and AgentCore Runtime/Gateway/Memory/Policy must be
+# available in the chosen region; cdk deploy surfaces a clear AWS error if
+# either isn't true for the region you pick.
+read_env_default AWS_DEFAULT_REGION "${env_file}"
+if [[ -z "${AWS_DEFAULT_REGION:-}" ]]; then
+  echo "AWS_DEFAULT_REGION is required. Set it in .env (see .env.example)." >&2
   exit 2
 fi
+region="${AWS_DEFAULT_REGION}"
+stack_name="${STACK_NAME:-XrplAgentCorePoc}"
+image_tag="${RUNTIME_IMAGE_TAG:-$(git -C "${repository_root}" rev-parse --short HEAD 2>/dev/null || date +%Y%m%d%H%M%S)}"
 
 required=(
   XRPL_EXECUTION_ADDRESS
@@ -22,16 +32,8 @@ required=(
 # Exported values win; otherwise read each address from .env, which
 # scripts/verify_and_set_env.py writes. Only these keys are read, so local-only
 # settings in .env (such as ALLOW_DEMO_AUTH) never reach the deployment.
-env_file="${ENV_FILE:-${repository_root}/.env}"
 for name in "${required[@]}"; do
-  if [[ -z "${!name:-}" && -f "${env_file}" ]]; then
-    value="$(grep -E "^(export[[:space:]]+)?${name}=" "${env_file}" | tail -n 1 | cut -d= -f2- || true)"
-    value="${value%\"}"; value="${value#\"}"
-    if [[ -n "${value}" ]]; then
-      printf -v "${name}" '%s' "${value}"
-      export "${name}"
-    fi
-  fi
+  read_env_default "${name}" "${env_file}"
   if [[ -z "${!name:-}" ]]; then
     echo "${name} is required. Run: uv run python scripts/verify_and_set_env.py" >&2
     exit 2
@@ -58,6 +60,7 @@ deploy_stack() {
     --parameters "XrplFeeMerchantAddress=${XRPL_FEE_MERCHANT_ADDRESS}" \
     --parameters "XrplUsdIssuerAddress=${XRPL_USD_ISSUER_ADDRESS}" \
     --parameters "XrplMxnIssuerAddress=${XRPL_MXN_ISSUER_ADDRESS}" \
+    -c "region=${region}" \
     -c "runtimeImageTag=${image_tag}"
 }
 

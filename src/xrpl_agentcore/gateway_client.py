@@ -121,7 +121,7 @@ class GatewayClient:
         self.owner_sub = owner_sub
         self.policy_session_id = policy_session_id
         self.gateway_url = gateway_url or os.environ.get("AGENTCORE_GATEWAY_URL", "")
-        self.region = region or os.environ.get("AWS_DEFAULT_REGION", "us-west-2")
+        self.region = region or os.environ["AWS_DEFAULT_REGION"]
         self.session = session or boto3.Session()
         self.http_session = http_session or URLLib3Session()
 

@@ -2,14 +2,22 @@
 
 ## Prerequisites
 
-- AWS credentials authorized for CDK deployment in `us-west-2`, including ECR,
-  CodeBuild, and S3
+- AWS credentials authorized for CDK deployment in your chosen region,
+  including ECR, CodeBuild, and S3
 - Node.js 22.12+ (or 24/26), Python 3.13, `uv`, AWS CLI, and CDK bootstrap
 - Bedrock model access for the configured Sonnet inference profile
 
 No local Docker or other container engine is required. `deploy.sh` builds and
 pushes the Runtime image with AWS CodeBuild, so this works from a machine with
 no container engine at all.
+
+**Region:** `AWS_DEFAULT_REGION` in `.env` is the only place a default region
+lives (`us-west-2`); edit it to deploy elsewhere. Claude Sonnet 4.5 is invoked
+through the `us.` cross-region inference profile, which fans out only to
+`us-east-1`, `us-east-2`, and `us-west-2` regardless of which of those three
+you deploy to — deploying outside them needs model access and an inference
+profile for that region, and AgentCore Runtime, Gateway, Memory, and Policy
+available there too.
 
 ## 1. Provision disposable Testnet fixtures
 
@@ -53,7 +61,7 @@ below.
 ## 2. Bootstrap and deploy
 
 ```bash
-npx cdk bootstrap aws://ACCOUNT_ID/us-west-2
+npx cdk bootstrap "aws://ACCOUNT_ID/$(grep '^AWS_DEFAULT_REGION=' .env | cut -d= -f2-)"
 ./scripts/deploy.sh
 ```
 

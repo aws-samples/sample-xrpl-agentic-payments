@@ -6,10 +6,14 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
 import boto3
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _env_file import read_env_value  # noqa: E402
 from xrpl.clients import JsonRpcClient
 from xrpl.models import IssuedCurrencyAmount
 from xrpl.models.transactions import AccountSet, OfferCreate, Payment, TrustSet
@@ -272,13 +276,14 @@ def main() -> None:
         description="Create disposable wallets and USD/MXN liquidity on XRPL Testnet."
     )
     parser.add_argument("--rpc-url", default=DEFAULT_RPC)
-    parser.add_argument("--region", default="us-west-2")
+    parser.add_argument("--region", default=None)
     parser.add_argument("--output", type=Path, default=Path(".testnet-fixtures.json"))
     parser.add_argument(
         "--write-secrets",
         action="store_true",
         help="Create/update the three signer Secrets Manager entries.",
     )
+    parser.add_argument("--env-file", type=Path, default=Path(".env"))
     args = parser.parse_args()
 
     wallets, _transaction_hashes = provision(args.rpc_url, args.output)
@@ -304,8 +309,20 @@ def main() -> None:
     corridor_path.write_text(json.dumps(corridor, indent=2) + "\n")
 
     if args.write_secrets:
+        # AWS_DEFAULT_REGION has exactly one source of truth: .env (see
+        # .env.example). No hardcoded default here.
+        region = (
+            args.region
+            or os.environ.get("AWS_DEFAULT_REGION")
+            or read_env_value(args.env_file, "AWS_DEFAULT_REGION")
+        )
+        if not region:
+            raise SystemExit(
+                f"AWS_DEFAULT_REGION is required with --write-secrets. Set it in "
+                f"{args.env_file} (see .env.example) or pass --region."
+            )
         for wallet_name, secret_name in SECRET_NAMES.items():
-            secret_upsert(args.region, secret_name, wallets[wallet_name])
+            secret_upsert(region, secret_name, wallets[wallet_name])
 
     public = {name: wallet.address for name, wallet in wallets.items()}
     print(json.dumps({"wallets": public, "secrets_written": args.write_secrets}, indent=2))

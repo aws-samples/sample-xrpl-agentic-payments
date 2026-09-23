@@ -26,7 +26,7 @@ def test_preference_memory_is_opt_in_filtered_and_uses_sdk_timestamp(
 ) -> None:
     fake = FakeMemoryClient()
     monkeypatch.setattr(PreferenceMemory, "_client", lambda _self: fake)
-    memory = PreferenceMemory("memory-id")
+    memory = PreferenceMemory("memory-id", region="us-west-2")
 
     assert (
         memory.remember(

@@ -38,6 +38,7 @@ def test_gateway_client_injects_owner_outside_model_arguments() -> None:
         owner_sub="trusted-owner",
         policy_session_id="run-123",
         gateway_url="https://example.com/mcp",
+        region="us-west-2",
         session=CredentialsSession(),
         http_session=http,
     )
@@ -73,6 +74,7 @@ def test_gateway_failure_diagnostics_redact_owner(caplog) -> None:
         owner_sub="trusted-owner",
         policy_session_id="run-123",
         gateway_url="https://example.com/mcp",
+        region="us-west-2",
         session=CredentialsSession(),
         http_session=http,
     )
@@ -98,6 +100,7 @@ def test_gateway_mcp_error_result_is_not_treated_as_success(caplog) -> None:
         owner_sub="trusted-owner",
         policy_session_id="run-123",
         gateway_url="https://example.com/mcp",
+        region="us-west-2",
         session=CredentialsSession(),
         http_session=HttpSession(Response(content=content)),
     )

@@ -6,9 +6,12 @@ Amazon Cognito, and XRPL Testnet.
 
 The sample demonstrates exact-output issued-currency transfers with bounded
 `SendMax`, an XRP-denominated x402 service fee, direct Testnet wallet delivery,
-and simulated local-fiat payout. The language model can discover corridors,
-obtain quotes, create transfer intents, and read status. It cannot approve,
-sign, or execute a payment.
+and simulated local-fiat payout. The language model can discover
+[corridors](https://en.wikipedia.org/wiki/Remittance) — the remittance-industry
+term for a fixed source-currency → destination-currency route, such as
+USD→MXN (see `config/corridors.example.json`) — obtain quotes, create
+transfer intents, and read status. It cannot approve, sign, or execute a
+payment.
 
 > **Testnet demonstration only**
 >
@@ -86,13 +89,17 @@ whose `approval_hash` does not match the quoted terms returns `409`.
 
 ### Level 3: end to end on AWS and XRPL Testnet
 
-Use a disposable sandbox account in `us-west-2`. This creates billable AWS
-resources and three Secrets Manager secrets. See
-[Prerequisites](#prerequisites) for Bedrock model access. No local Docker is
-needed; `deploy.sh` builds the Runtime image with AWS CodeBuild.
+Use a disposable sandbox account. This creates billable AWS resources and
+three Secrets Manager secrets. See [Prerequisites](#prerequisites) for
+Bedrock model access. No local Docker is needed; `deploy.sh` builds the
+Runtime image with AWS CodeBuild.
 
 ```bash
-export AWS_PROFILE=<sandbox-profile> AWS_DEFAULT_REGION=us-west-2
+export AWS_PROFILE=<sandbox-profile>
+cp -n .env.example .env   # skip if you already have one from Level 1
+
+# AWS_DEFAULT_REGION in .env is the only place the deploy region lives; the
+# default there is us-west-2 — edit it to deploy elsewhere.
 
 # 1. Create Testnet wallets, trust lines, and liquidity; store 3 signer seeds.
 uv run python scripts/provision_testnet.py --write-secrets
@@ -100,9 +107,9 @@ uv run python scripts/provision_testnet.py --write-secrets
 # 2. Verify the ledger state and write the public wallet addresses to .env.
 uv run python scripts/verify_and_set_env.py
 
-# 3. Deploy. deploy.sh reads the addresses from .env, and, after enabling the
-# Runtime, writes web/.env.local from the stack's own outputs.
-# First time per account: npx cdk bootstrap aws://<account-id>/us-west-2
+# 3. Deploy. deploy.sh reads the region and addresses from .env, and, after
+# enabling the Runtime, writes web/.env.local from the stack's own outputs.
+# First time per account: npx cdk bootstrap aws://<account-id>/<region from .env>
 ./scripts/deploy.sh
 
 # 4. Create a sign-in user and start the app.
@@ -171,6 +178,7 @@ tables, Lambda execution functions, or Step Functions start permissions.
 
 - [Detailed architecture and safety model](docs/architecture.md)
 - [Standalone ASCII architecture](docs/architecture-ascii.md)
+- [Control-flow sequence, with trust-boundary swimlanes](docs/sequence.md)
 - [Deployment details](docs/deployment.md)
 - [Research and source mapping](docs/research.md)
 - [Recorded live Testnet evidence](docs/live-testnet-evidence.md)
@@ -203,13 +211,19 @@ For full deployment and live Testnet acceptance:
   Amazon Bedrock, and Amazon Bedrock AgentCore.
 - Bedrock model access for the configured Sonnet inference profile.
 - AWS CLI v2.
-- CDK bootstrap permission in `us-west-2`.
+- CDK bootstrap permission in your chosen region.
 - Network access to the XRPL Testnet faucet and JSON-RPC endpoint.
 
 No local Docker or other container engine is needed. `deploy.sh` builds and
 pushes the ARM64 Runtime image with AWS CodeBuild.
 
-The deployment script intentionally supports only `us-west-2`.
+**Region:** set by `AWS_DEFAULT_REGION` in `.env` — the only place a default
+region lives, `us-west-2` there; edit it to deploy elsewhere. Claude Sonnet
+4.5 is invoked through the `us.` cross-region
+inference profile, which fans out only to `us-east-1`, `us-east-2`, and
+`us-west-2` regardless of which of those three you deploy to — deploying
+outside them needs model access and an inference profile for that region, and
+AgentCore Runtime, Gateway, Memory, and Policy available there too.
 
 ## Install and verify locally
 
@@ -296,10 +310,14 @@ and fixture provisioning creates or updates three Secrets Manager secrets.
 
 ```bash
 export AWS_PROFILE=<sandbox-profile>
-export AWS_DEFAULT_REGION=us-west-2
 
 aws sts get-caller-identity
 ```
+
+The region comes from `AWS_DEFAULT_REGION` in `.env` — the only place a
+default region lives, `us-west-2` there by default. Edit it to deploy
+elsewhere; every script below reads it from `.env`, with no default of its
+own.
 
 ### 2. Provision disposable XRPL Testnet fixtures
 
@@ -346,7 +364,7 @@ touching `.env`, add `--verify-only`.
 
 ```bash
 export AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-npx cdk bootstrap "aws://${AWS_ACCOUNT_ID}/us-west-2"
+npx cdk bootstrap "aws://${AWS_ACCOUNT_ID}/$(grep '^AWS_DEFAULT_REGION=' .env | cut -d= -f2-)"
 ./scripts/deploy.sh
 ```
 

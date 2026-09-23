@@ -26,7 +26,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _env_file import read_env_value, upsert_env  # noqa: E402
 
 DEFAULT_STACK_NAME = "XrplAgentCorePoc"
-DEFAULT_REGION = "us-west-2"
 DEFAULT_PAYOUT_ALIAS = "fixture-bank-token"
 
 
@@ -80,12 +79,27 @@ def web_env_values(stack_name: str, region: str, env_file: Path) -> dict[str, st
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--stack-name", default=os.environ.get("STACK_NAME", DEFAULT_STACK_NAME))
-    parser.add_argument("--region", default=os.environ.get("AWS_DEFAULT_REGION", DEFAULT_REGION))
+    parser.add_argument("--region", default=None)
     parser.add_argument("--env-file", type=Path, default=Path(".env"))
     parser.add_argument("--output", type=Path, default=Path("web/.env.local"))
     args = parser.parse_args()
 
-    values = web_env_values(args.stack_name, args.region, args.env_file)
+    # AWS_DEFAULT_REGION has exactly one source of truth: .env (see
+    # .env.example). No hardcoded default here. An exported value or --region
+    # wins; otherwise read it straight from .env, so this works without
+    # sourcing .env into the shell first.
+    region = (
+        args.region
+        or os.environ.get("AWS_DEFAULT_REGION")
+        or read_env_value(args.env_file, "AWS_DEFAULT_REGION")
+    )
+    if not region:
+        raise SystemExit(
+            f"AWS_DEFAULT_REGION is required. Set it in {args.env_file} "
+            "(see .env.example) or pass --region."
+        )
+
+    values = web_env_values(args.stack_name, region, args.env_file)
     upsert_env(args.output, values)
     print(json.dumps({"env_file": str(args.output), "env_keys_written": sorted(values)}, indent=2))
 

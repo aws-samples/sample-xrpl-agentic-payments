@@ -71,7 +71,7 @@ def workflow_task(
 
 @lru_cache(maxsize=1)
 def configured_execution_services() -> ExecutionServices:
-    region = os.environ.get("AWS_DEFAULT_REGION", "us-west-2")
+    region = os.environ["AWS_DEFAULT_REGION"]
     dynamodb = boto3.resource("dynamodb", region_name=region)
     transfers = DynamoTransferRepository(dynamodb.Table(os.environ["TRANSFER_TABLE_NAME"]))
     artifacts = DynamoExecutionArtifactRepository(
