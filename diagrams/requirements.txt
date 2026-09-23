@@ -1,16 +1,1 @@
-# Dependencies for regenerating the architecture diagrams
-# (diagrams/render_architecture.py, diagrams/render_agent_pipeline.py).
-#
-# Deliberately NOT in the repo-root requirements.txt: no runtime code imports
-# matplotlib, and requirements.txt is what Dockerfile.webapp installs, so
-# putting it there would add tens of megabytes to the web app image to draw a
-# picture that is committed as a PNG.
-#
-#   pip install -r diagrams/requirements.txt
-#   python3 diagrams/render_architecture.py
-#   python3 diagrams/render_agent_pipeline.py
-
-# Renders the figure. matplotlib.image.imread needs pillow to read the vendored
-# PNG service icons in diagrams/icons/.
-matplotlib>=3.9.0
-pillow>=10.4.0
+matplotlib>=3.8

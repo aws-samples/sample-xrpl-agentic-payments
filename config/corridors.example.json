@@ -1,0 +1,16 @@
+[
+  {
+    "id": "usd-mxn-testnet",
+    "label": "USD to MXN demo corridor",
+    "source_asset": {
+      "currency": "USD",
+      "issuer": "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"
+    },
+    "destination_asset": {
+      "currency": "MXN",
+      "issuer": "r3XJToiKCCndKMi1NWmWhBjLBuwmHZimbg"
+    },
+    "fixture_rate": "17.25",
+    "enabled": true
+  }
+]
