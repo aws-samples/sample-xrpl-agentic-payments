@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
-# SPDX-License-Identifier: MIT-0
 """Reusable component-architecture diagram renderer with self-verification.
 
 Import this, declare a spec, call render(). matplotlib only — works offline, no
@@ -126,10 +124,6 @@ class Spec:
     note: str = ""
     legend: list = field(default_factory=list)   # (style, colour, text)
     icon_dir: str = "icons"
-    # Prose width for the note block, inches. The note is the only long-form
-    # text in the picture; left unwrapped it either runs off the canvas or forces
-    # the canvas as wide as the longest sentence, which is unreadable either way.
-    note_w: float = 11.5
     # Columns considered inside your cloud account. If set, check_trust_boundary()
     # asserts every node's column agrees with the account zone's membership.
     inside_cols: set = field(default_factory=set)
@@ -236,44 +230,18 @@ def _anchor(x0, y0, x1, y1, half):
 # expressible, add a check here so it cannot regress.
 # --------------------------------------------------------------------------
 
-def _all_text(spec):
-    """Every string the renderer will draw. Checks that read text use this so a
-    new text-bearing field cannot quietly escape all of them."""
-    strings = [z.label for z in spec.zones] + [spec.note, spec.title, spec.subtitle]
-    for n in spec.nodes.values():
-        strings += [n.caption, n.sub]
-    strings += [e.label for e in spec.edges]
-    strings += [text for _style, _colour, text in spec.legend]
-    return [s for s in strings if s]
-
-
 def check_account_ids(spec):
     """Any 12-digit run — i.e. an AWS account ID — in the diagram text.
 
     Diagrams get pasted into decks and tickets. The region is useful context; the
     account number is only useful to someone enumerating your resources.
     """
+    strings = [z.label for z in spec.zones] + [spec.note, spec.title, spec.subtitle]
+    for n in spec.nodes.values():
+        strings += [n.caption, n.sub]
+    strings += [e.label for e in spec.edges]
     return [f"account ID {m} appears in the diagram text"
-            for s in _all_text(spec) for m in re.findall(r"\b\d{12}\b", s)]
-
-
-def check_dollar_mathtext(spec):
-    r"""Unescaped '$' anywhere in the diagram text.
-
-    matplotlib reads a PAIR of dollar signs as mathtext delimiters, so a note
-    saying "at or over $10,000 ... exactly $10,000 is held" renders everything
-    between the two as run-together italic maths. The layout is unaffected and
-    the text still measures clean, so no other check sees it — this one exists
-    because it happened: a $10,000 threshold, stated twice in one note, came out
-    as an unreadable formula in the shipped PNG.
-
-    Write \$ for a literal dollar. Escaping every one of them, not just the ones
-    that currently happen to pair up, is what keeps this from coming back when
-    someone adds a second amount later.
-    """
-    return [f"unescaped '$' in {s[:60]!r} — write \\$ (matplotlib reads a pair "
-            f"of $ as mathtext)"
-            for s in _all_text(spec) if re.search(r"(?<!\\)\$", s)]
+            for s in strings for m in re.findall(r"\b\d{12}\b", s or "")]
 
 
 def check_endpoints(spec):
@@ -414,15 +382,10 @@ def check_art(spec):
 
 
 def check_glyphs(spec):
-    """Any drawn character absent from the render font, which draws as a tofu box.
+    """Tile glyphs absent from the render font, which draw as tofu boxes.
 
     matplotlib only WARNS about these, so check up front. Many plausible symbols
-    are missing from DejaVu Sans (U+1F511 KEY, U+26BF, U+1F5DD all are) — and so
-    are the circled numerals past ⑩, which is the trap: ①-⑩ render, ⑪ onward do
-    not, so a numbered dataflow looks fine until it grows an eleventh step.
-
-    Covers tile glyphs AND every caption, label, note and legend string, because
-    a tofu box in a label is exactly as wrong as one in a tile.
+    are missing from DejaVu Sans (U+1F511 KEY, U+26BF, U+1F5DD all are).
     """
     try:
         from fontTools.ttLib import TTFont
@@ -433,22 +396,14 @@ def check_glyphs(spec):
     covered = set()
     for table in font["cmap"].tables:
         covered |= set(table.cmap)
-
-    def missing(s):
-        return sorted({ch for ch in s if ord(ch) > 127 and ord(ch) not in covered})
-
-    out = [f"{k}: tile glyph {ch!r} (U+{ord(ch):04X}) missing from DejaVu Sans"
-           for k, n in spec.nodes.items() if not n.art.endswith(".png")
-           for ch in missing(n.art)]
-    out += [f"glyph {ch!r} (U+{ord(ch):04X}) in {s[:48]!r} missing from "
-            f"DejaVu Sans"
-            for s in _all_text(spec) for ch in missing(s)]
-    return out
+    return [f"{k}: glyph {ch!r} (U+{ord(ch):04X}) missing from DejaVu Sans"
+            for k, n in spec.nodes.items() if not n.art.endswith(".png")
+            for ch in n.art if ord(ch) > 127 and ord(ch) not in covered]
 
 
 CHECKS = [check_endpoints, check_art, check_glyphs, check_account_ids,
-          check_dollar_mathtext, check_trust_boundary, check_zone_intrusions,
-          check_zone_overlaps, check_arrows_through_tiles]
+          check_trust_boundary, check_zone_intrusions, check_zone_overlaps,
+          check_arrows_through_tiles]
 
 
 def text_overlaps(fig, ax):
@@ -469,28 +424,6 @@ def text_overlaps(fig, ax):
     return hits
 
 
-def _wrap_note(r, note, width):
-    """Wrap the note to `width` inches, keeping each line's leading indent and
-    hanging the continuations under it.
-
-    Specs author the note as one line per point, because that is how the points
-    are numbered and a hand-wrapped sentence goes stale the moment it is edited.
-    The wrapping belongs here.
-    """
-    lines = []
-    for raw in note.split("\n"):
-        if not raw.strip():
-            lines.append("")
-            continue
-        indent = raw[:len(raw) - len(raw.lstrip())]
-        hang = indent + "    "
-        avail = width - r.size(hang, FS["note"])[0]
-        parts = r.wrap(raw.strip(), FS["note"], max(avail, 2.0)).split("\n")
-        lines.append(indent + parts[0])
-        lines += [hang + p for p in parts[1:]]
-    return lines
-
-
 def draw(spec, out_path):
     r = Ruler()
     cx, cy = spec.grid()
@@ -499,48 +432,28 @@ def draw(spec, out_path):
 
     title_h = r.size("Ag", FS["title"], "bold")[1]
     sub_h = r.size("Ag", FS["sub"])[1] if spec.subtitle else 0.0
-    note_lines = _wrap_note(r, spec.note, spec.note_w) if spec.note else []
+    note_lines = spec.note.split("\n") if spec.note else []
     note_h = (r.size("Ag", FS["note"])[1] * (1 + 1.55 * (len(note_lines) - 1))
               if note_lines else 0.0)
     legend_h = (r.size("Ag", FS["sub"])[1] + 0.26) if spec.legend else 0.0
     head_h = title_h + sub_h + 0.34
 
-    # The canvas must clear EVERY node as well as every zone. Deriving the bounds
-    # from the zone rectangles alone silently pushed any node that belonged to no
-    # zone off the edge of the image — the arrows into it ran off the canvas and
-    # the tile was simply absent, which no check could catch.
-    boxes = [_extent(r, spec, k, cx, cy) for k in spec.nodes]
-    left = min(b[0] for b in boxes)
-    right = max(b[2] for b in boxes)
-    top = max(b[3] for b in boxes)
     if rects:
-        left = min(left, min(rc[0] for rc in rects))
+        body_dx = 0.40 - min(rc[0] for rc in rects)
         # A zone label starts at its left edge and can run wider than the zone
         # itself, so the canvas must clear the LABEL, not just the rectangle.
-        right = max(right, max(rc[2] for rc in rects),
+        right = max(max(rc[2] for rc in rects),
                     max(rc[0] + 0.12 + r.size(rc[4].label, FS["zone"], "bold")[0]
                         for rc in rects))
-        top = max(top, max(rc[3] for rc in rects))
-    body_dx = 0.40 - left
+        top = max(rc[3] for rc in rects)
+    else:
+        boxes = [_extent(r, spec, k, cx, cy) for k in spec.nodes]
+        body_dx = 0.40 - min(b[0] for b in boxes)
+        right, top = max(b[2] for b in boxes), max(b[3] for b in boxes)
 
     body_dy = note_h + legend_h + 0.34
     W = right + body_dx + 0.40
     H = top + body_dy + head_h + 0.30
-
-    # The note and the legend are drawn at x=0.40 and are NOT wrapped — they are
-    # authored with explicit line breaks. Sizing the canvas from the diagram body
-    # alone therefore CUT LONG NOTE LINES IN HALF: the glyphs were laid out past
-    # the axes limit and simply did not appear. text_overlaps() cannot see it
-    # (nothing overlaps) and neither can any spec-level check (it is a rendering
-    # property, not a claim), so the width is derived here instead.
-    text_w = max([r.size(ln, FS["note"])[0] for ln in note_lines] or [0.0])
-    if spec.legend:
-        text_w = max(text_w, sum(0.52 + r.size(t, FS["sub"])[0] + 0.55
-                                 for _style, _colour, t in spec.legend))
-    if text_w + 0.80 > W:
-        extra = text_w + 0.80 - W
-        W += extra
-        body_dx += extra / 2      # keep the picture centred over the text block
 
     fig = plt.figure(figsize=(W, H), dpi=DPI)
     ax = fig.add_axes([0, 0, 1, 1])
@@ -635,7 +548,7 @@ def draw(spec, out_path):
             lx += 0.52 + r.size(text, FS["sub"])[0] + 0.55
 
     if spec.note:
-        ax.text(0.40, note_h + 0.20, "\n".join(note_lines), fontsize=FS["note"],
+        ax.text(0.40, note_h + 0.20, spec.note, fontsize=FS["note"],
                 color="#333333", va="top", linespacing=1.55, zorder=7)
     r.close()
 

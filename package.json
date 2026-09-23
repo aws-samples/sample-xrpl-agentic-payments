@@ -1,0 +1,16 @@
+{
+  "name": "xrpl-agentcore-integration",
+  "private": true,
+  "workspaces": [
+    "infra",
+    "web"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace infra && npm run build --workspace web",
+    "test": "npm run test --workspace infra && npm run test --workspace web",
+    "lint": "npm run lint --workspace infra && npm run lint --workspace web"
+  },
+  "overrides": {
+    "@ai-sdk/google-vertex": "3.0.158"
+  }
+}
