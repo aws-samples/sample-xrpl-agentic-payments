@@ -310,7 +310,7 @@ For full deployment and live Testnet acceptance:
 
 - An AWS sandbox account with credentials for CDK, IAM, KMS, DynamoDB, Lambda,
   API Gateway, Cognito, Step Functions, ECR, CodeBuild, S3, Secrets Manager,
-  Amazon Bedrock, and Amazon Bedrock AgentCore.
+  CloudWatch Logs, X-Ray, Amazon Bedrock, and Amazon Bedrock AgentCore.
 - Bedrock model access for the configured Sonnet inference profile.
 - AWS CLI v2.
 - CDK bootstrap permission in your chosen region.

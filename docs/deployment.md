@@ -119,7 +119,61 @@ POC_USER_PASSWORD="replace-with-a-strong-poc-password" \
 The Next.js server forwards the user's access token to the JWT-protected
 Runtime. Do not expose AWS credentials to the browser.
 
-## 3. Acceptance
+## 3. Observability
+
+The stack enables tracing on the Runtime, Gateway, and Memory by default —
+`tracingEnabled: true` on the Runtime, and explicit trace/log delivery wired
+up for Gateway and Memory, which don't have Runtime's shortcut. None of it
+produces visible traces until you complete a one-time, per-account-and-region
+setup: CloudWatch Transaction Search, which is what lets X-Ray deliver trace
+data into CloudWatch in the first place.
+
+```bash
+uv run python scripts/verify_and_set_env.py --verify-only  # nothing to do here, just a reminder .env has a region
+./scripts/enable_observability.sh
+```
+
+This is safe to re-run and changes only your account's X-Ray configuration —
+not anything specific to this stack. If the account is shared with other
+workloads that manage their own X-Ray setup, coordinate before running it.
+Skip it and logs still work; only traces need it.
+
+Where things land:
+
+- **Runtime** spans go to its own log group,
+  `/aws/bedrock-agentcore/runtimes/<runtime-id>-DEFAULT`. `GET /ping` and
+  `POST /invocations` requests are visible there immediately (see
+  [Confirming an agent was invoked](#confirming-an-agent-was-invoked) below);
+  traces need the account setup above.
+- **Gateway** and **Memory** each get a dedicated CloudWatch log group for
+  `APPLICATION_LOGS` — printed as the `GatewayLogGroupName` and
+  `MemoryLogGroupName` stack outputs — plus a shared X-Ray trace destination.
+- All three show up together in the
+  [CloudWatch GenAI Observability dashboard](https://console.aws.amazon.com/cloudwatch/home#gen-ai-observability)
+  once Transaction Search is on. This dashboard is also what
+  [Amazon CloudWatch Omni](https://aws.amazon.com/blogs/mt/introducing-amazon-cloudwatch-omni-observability-for-the-ai-era/)
+  reads from — AgentCore's existing observability carries forward automatically,
+  with no extra setup beyond what's above.
+
+### Confirming an agent was invoked
+
+Two log groups are created per Runtime (a naming artifact of the AgentCore
+service, not a bug): an uppercase `...-DEFAULT` and a lowercase `...-default`.
+Only one receives traffic — check both if one looks empty.
+
+```bash
+aws logs tail /aws/bedrock-agentcore/runtimes/<runtime-id>-default --region us-west-2 --since 1h
+```
+
+Or, in the [CloudWatch Logs Insights console](https://console.aws.amazon.com/cloudwatch/home#logsV2:logs-insights),
+run this query against that log group to isolate real chat traffic from
+`/ping` health checks:
+
+```
+fields @timestamp, @message | filter @message like /invocations/ | sort @timestamp desc
+```
+
+## 4. Acceptance
 
 In the UI:
 
