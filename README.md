@@ -131,10 +131,34 @@ Then open [http://localhost:3000](http://localhost:3000) and sign in:
    `COMPLETED`. The card links the x402 fee and payment transaction hashes to
    testnet.xrpl.org.
 
-To repeat the same checks without the browser, see [Live acceptance](#live-acceptance).
-Remove everything with [Cleanup](#cleanup).
+A second one-click starter, **Direct wallet**, quotes 5 MXN for direct XRPL
+wallet delivery instead of the simulated payout. To repeat the same checks
+without the browser, see [Live acceptance](#live-acceptance). For the
+mechanics behind Level 3's commands, see
+[Deployment reference](#deployment-reference). Remove everything with
+[Cleanup](#cleanup).
 
-Each section below explains a step in more detail.
+`.env`, `web/.env.local`, and generated fixture files are gitignored. Never
+commit wallet seeds, signed transaction blobs, AWS credentials, or Cognito
+tokens.
+
+### Local AG-UI Runtime health check
+
+Starts the same Runtime container `deploy.sh` deploys, without AWS
+credentials or a model call — only `/ping`:
+
+```bash
+set -a; source .env; set +a
+ALLOW_DEMO_AUTH=true uv run python -m xrpl_agentcore.agent_runtime
+```
+
+```bash
+curl http://localhost:8080/ping
+```
+
+A real chat additionally needs AWS credentials, `AGENTCORE_GATEWAY_URL`,
+Bedrock model access, and the deployed Gateway targets — Quickstart Level 3
+sets all of that up.
 
 ## What the sample includes
 
@@ -219,122 +243,24 @@ pushes the ARM64 Runtime image with AWS CodeBuild.
 
 **Region:** set by `AWS_DEFAULT_REGION` in `.env` — the only place a default
 region lives, `us-west-2` there; edit it to deploy elsewhere. Claude Sonnet
-4.5 is invoked through the `us.` cross-region
-inference profile, which fans out only to `us-east-1`, `us-east-2`, and
-`us-west-2` regardless of which of those three you deploy to — deploying
-outside them needs model access and an inference profile for that region, and
-AgentCore Runtime, Gateway, Memory, and Policy available there too.
+4.5 is invoked through the `us.` cross-region inference profile, which fans
+out only to `us-east-1`, `us-east-2`, and `us-west-2` regardless of which of
+those three you deploy to — deploying outside them needs model access and an
+inference profile for that region, and AgentCore Runtime, Gateway, Memory,
+and Policy available there too.
 
-## Install and verify locally
+## Deployment reference
 
-Clone the repository and install locked dependencies:
+Detail behind Quickstart Level 3's commands.
 
-```bash
-git clone https://github.com/aws-samples/sample-xrpl-agentic-payments.git
-cd sample-xrpl-agentic-payments
-
-uv sync --extra dev
-npm ci
-```
-
-Create local configuration:
-
-```bash
-cp .env.example .env
-```
-
-`.env`, `web/.env.local`, generated wallet files, fixture corridor
-configuration, CDK output, dependencies, and build artifacts are ignored by
-Git. Never add wallet seeds, signed transaction blobs, AWS credentials,
-Cognito tokens, or production PII to the repository.
-
-Run the complete source verification gate:
-
-```bash
-./scripts/verify.sh
-```
-
-The gate runs Ruff, Python formatting checks, Pytest, TypeScript checks,
-Vitest, production builds, npm audit, and CDK synthesis.
-
-## Run the local API fixture mode
-
-The API can run without DynamoDB by leaving `TRANSFER_TABLE_NAME` empty. Source
-the local environment and enable the explicitly marked demo identity:
-
-```bash
-set -a
-source .env
-set +a
-
-ALLOW_DEMO_AUTH=true uv run uvicorn xrpl_agentcore.api:app --reload --port 8000
-```
-
-In another terminal:
-
-```bash
-curl http://localhost:8000/health
-curl -H "X-Demo-User: sample-user" http://localhost:8000/v1/corridors
-```
-
-This mode is suitable for deterministic API and domain development. It does
-not execute the deployed Step Functions, signer, or XRPL settlement workflow.
-
-## Run the local AG-UI Runtime health check
-
-Starting the Runtime and calling `/ping` does not invoke a model:
-
-```bash
-set -a
-source .env
-set +a
-
-ALLOW_DEMO_AUTH=true uv run python -m xrpl_agentcore.agent_runtime
-```
-
-In another terminal:
-
-```bash
-curl http://localhost:8080/ping
-```
-
-Real agent invocations additionally require valid AWS credentials,
-`AGENTCORE_GATEWAY_URL`, Bedrock model access, and the deployed Gateway targets.
-
-## Deploy the complete AWS and XRPL Testnet sample
-
-Use a disposable AWS sandbox. The deployment creates billable AWS resources,
-and fixture provisioning creates or updates three Secrets Manager secrets.
-
-### 1. Select the AWS account and region
-
-```bash
-export AWS_PROFILE=<sandbox-profile>
-
-aws sts get-caller-identity
-```
-
-The region comes from `AWS_DEFAULT_REGION` in `.env` — the only place a
-default region lives, `us-west-2` there by default. Edit it to deploy
-elsewhere; every script below reads it from `.env`, with no default of its
-own.
-
-### 2. Provision disposable XRPL Testnet fixtures
-
-```bash
-uv run python scripts/provision_testnet.py --write-secrets
-uv run python scripts/verify_and_set_env.py
-```
-
-Provisioning creates eight disposable Testnet wallets, USD and MXN issuers,
-trust lines, balances, and USD/MXN order-book liquidity. It writes:
-
-- `.testnet-fixtures.json`: mode `0600`, contains wallet seeds, ignored by Git.
-- `config/corridors.json`: generated deployment fixture, ignored by Git.
-- Secrets Manager entries for execution, fee-payer, and fee-merchant seeds.
-
-Each wallet has one role. The first six are stack parameters; only the three
-signing wallets have seeds in Secrets Manager.
+**Wallets.** `provision_testnet.py --write-secrets` creates eight disposable
+Testnet wallets, USD and MXN issuers, trust lines, balances, and USD/MXN
+order-book liquidity. It writes `.testnet-fixtures.json` (mode `0600`,
+contains seeds, gitignored), `config/corridors.json` (gitignored), and the
+three signer seeds into Secrets Manager. Each wallet has one role, and the
+roles cannot be merged: XRPL rejects a Payment to its own account, so the
+fee payer and fee merchant must differ; an issuer cannot hold its own token,
+so neither issuer can double as the sender or a destination.
 
 | Wallet | Role | Deployment value |
 |--------|------|------------------|
@@ -347,75 +273,31 @@ signing wallets have seeds in Secrets Manager.
 | `recipient` | Destination for direct-wallet delivery in the web starter prompt. | `NEXT_PUBLIC_DEMO_RECIPIENT_ADDRESS` |
 | `liquidity` | Market maker. Places the USD/MXN offer the payment path crosses. | none |
 
-The roles cannot be merged. XRPL rejects a Payment to its own account, so
-the fee payer and fee merchant must differ. An issuer cannot hold its own token,
-so neither issuer can double as the sender or a destination.
+`verify_and_set_env.py` re-reads the validated ledger state for every
+fixture and, only if every check passes, writes the seven public addresses
+above into `.env` (creating it from `.env.example` if absent; mode `0600`;
+seeds never written). A value already exported in the shell takes
+precedence. `--verify-only` checks the ledger without writing `.env`.
 
-`scripts/verify_and_set_env.py` re-reads the validated ledger state for every
-fixture. Only if all checks pass does it write the seven public addresses in the
-table above into `.env`. If `.env` does not exist yet, it creates it from
-`.env.example`. Other lines in `.env` are kept, the file is written with mode
-`0600`, and seeds are never written to it. Nothing needs to be exported by hand:
-`scripts/deploy.sh` reads the six stack parameters from `.env`. A value you
-export in the shell still takes precedence. To check the ledger without
-touching `.env`, add `--verify-only`.
+**Deploy.** `deploy.sh` reads the region and the six wallet addresses from
+`.env`, builds the ARM64 Lambda layer, runs `verify.sh`, then deploys in two
+CDK passes: the first creates ECR, a CodeBuild project, and supporting
+services with `DeployAgentRuntime=false`; CodeBuild then builds and pushes
+the ARM64 Runtime image; the second pass enables the Runtime with
+`DeployAgentRuntime=true`, referencing the tag CodeBuild just pushed. A
+Runtime can't reference an ECR tag that doesn't exist yet, which is why the
+two passes can't merge. The first pass reruns on retry until the Runtime
+exists, so a prior failed run is safe to re-attempt.
 
-### 3. Bootstrap CDK and deploy
-
-```bash
-export AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-npx cdk bootstrap "aws://${AWS_ACCOUNT_ID}/$(grep '^AWS_DEFAULT_REGION=' .env | cut -d= -f2-)"
-./scripts/deploy.sh
-```
-
-`scripts/deploy.sh` verifies a clean Git tree, builds the ARM64 Lambda layer,
-runs the full verification gate, deploys support resources, pushes the ARM64
-Runtime image to ECR, and enables the AgentCore Runtime in a second CDK pass.
-
-After the Runtime pass, `deploy.sh` calls `scripts/write_web_env.py`, which
-reads the API URL, Cognito user pool, and Runtime ARN straight from the
-stack's CloudFormation outputs (building `AGENTCORE_RUNTIME_URL` the same way
-`InvokeAgentRuntime` expects), reads the fixture recipient and payout alias
-from `.env`, and writes all six into `web/.env.local`. Nothing here is a
-secret — the URLs and Cognito IDs are endpoints, not credentials — but
-`AGENTCORE_RUNTIME_URL` is still server-only. Never prefix it with
-`NEXT_PUBLIC_`, and never expose AWS credentials to the browser.
-
-### 4. Configure and start the web application
-
-To (re)write `web/.env.local` without redeploying — for example, against a
-stack deployed earlier, or a different `STACK_NAME`/`AWS_DEFAULT_REGION` —
-run it directly:
-
-```bash
-uv run python scripts/write_web_env.py
-```
-
-Create or reset a POC Cognito user:
-
-```bash
-export POC_USER_EMAIL=demo@example.com
-export POC_USER_PASSWORD='<strong-disposable-password>'
-./scripts/create_poc_user.sh
-```
-
-Start the application:
-
-```bash
-npm run dev --workspace web
-```
-
-Open [http://localhost:3000](http://localhost:3000), sign in, and use either
-one-click starter:
-
-- **Direct wallet** requests a complete 5 MXN quote using the configured
-  fixture recipient address.
-- **Simulated fiat** requests a complete 10 MXN quote using the configured
-  payout alias.
-
-Both starters stop after rendering a structured quote. The user must separately
-request intent creation and explicitly select **Approve and execute** on the
-application-owned approval card.
+After the Runtime pass, `deploy.sh` calls `write_web_env.py`, which reads
+the API URL, Cognito user pool, and Runtime ARN from the stack's
+CloudFormation outputs, reads the fixture recipient and payout alias from
+`.env`, and writes all six into `web/.env.local`. None of these are secrets
+— they're endpoints and IDs — but `AGENTCORE_RUNTIME_URL` is still
+server-only: never prefix it with `NEXT_PUBLIC_`, and never expose AWS
+credentials to the browser. Run `write_web_env.py` directly to refresh
+`web/.env.local` without redeploying — for example, against a stack
+deployed earlier, or a different `STACK_NAME`/`AWS_DEFAULT_REGION`.
 
 ## Live acceptance
 
