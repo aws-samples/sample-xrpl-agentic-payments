@@ -61,14 +61,19 @@ deploy_stack() {
     -c "runtimeImageTag=${image_tag}"
 }
 
-stack_exists=false
-if aws cloudformation describe-stacks \
-  --region "${region}" \
-  --stack-name "${stack_name}" >/dev/null 2>&1; then
-  stack_exists=true
-fi
-
-if [[ "${stack_exists}" != "true" ]]; then
+runtime_arn="$(
+  aws cloudformation describe-stacks \
+    --region "${region}" \
+    --stack-name "${stack_name}" \
+    --query "Stacks[0].Outputs[?OutputKey=='RuntimeArn'].OutputValue | [0]" \
+    --output text 2>/dev/null || true
+)"
+if [[ "${runtime_arn}" != arn:* ]]; then
+  # No stack yet, or a stack whose Runtime pass never completed (for example,
+  # an earlier run that failed before the remote build below): safe to
+  # (re)apply the base resources — ECR, the CodeBuild project, its S3 source
+  # bucket — with DeployAgentRuntime=false. Skipped once the Runtime exists,
+  # so a rebuild never regresses a healthy stack back to no-Runtime.
   deploy_stack false
 fi
 
@@ -79,54 +84,63 @@ repository_uri="$(
     --query "Stacks[0].Outputs[?OutputKey=='RuntimeRepositoryUri'].OutputValue | [0]" \
     --output text
 )"
-account_id="${repository_uri%%.*}"
-aws ecr get-login-password --region "${region}" |
-  docker login --username AWS --password-stdin \
-    "${account_id}.dkr.ecr.${region}.amazonaws.com"
-docker buildx build \
-  --platform linux/arm64 \
-  --file "${repository_root}/Dockerfile.runtime" \
-  --tag "${repository_uri}:${image_tag}" \
-  --push \
-  "${repository_root}"
+build_project_name="$(
+  aws cloudformation describe-stacks \
+    --region "${region}" \
+    --stack-name "${stack_name}" \
+    --query "Stacks[0].Outputs[?OutputKey=='RuntimeBuildProjectName'].OutputValue | [0]" \
+    --output text
+)"
+build_source_bucket="$(
+  aws cloudformation describe-stacks \
+    --region "${region}" \
+    --stack-name "${stack_name}" \
+    --query "Stacks[0].Outputs[?OutputKey=='RuntimeBuildSourceBucket'].OutputValue | [0]" \
+    --output text
+)"
+
+# Build and push the Runtime image with AWS CodeBuild instead of a local
+# container engine. The zip carries exactly what Dockerfile.runtime COPYs
+# (also what .dockerignore allows through), so no repository secrets or
+# wallet fixtures are ever uploaded.
+build_source_zip="$(mktemp -d)/source.zip"
+(cd "${repository_root}" && zip -q -X -r "${build_source_zip}" \
+  Dockerfile.runtime pyproject.toml README.md src)
+aws s3 cp "${build_source_zip}" "s3://${build_source_bucket}/runtime-build/source.zip" \
+  --region "${region}"
+rm -rf "$(dirname "${build_source_zip}")"
+
+build_id="$(
+  aws codebuild start-build \
+    --region "${region}" \
+    --project-name "${build_project_name}" \
+    --environment-variables-override \
+      "name=REPO_URI,value=${repository_uri},type=PLAINTEXT" \
+      "name=IMAGE_TAG,value=${image_tag},type=PLAINTEXT" \
+    --query "build.id" --output text
+)"
+echo "Started remote build ${build_id} on ${build_project_name}..."
+
+build_status="IN_PROGRESS"
+while [[ "${build_status}" == "IN_PROGRESS" ]]; do
+  sleep 10
+  build_status="$(
+    aws codebuild batch-get-builds --region "${region}" --ids "${build_id}" \
+      --query "builds[0].buildStatus" --output text
+  )"
+done
+if [[ "${build_status}" != "SUCCEEDED" ]]; then
+  echo "Remote build ${build_id} finished with status ${build_status}." >&2
+  echo "Logs: aws codebuild batch-get-builds --region ${region} --ids ${build_id} --query 'builds[0].logs'" >&2
+  exit 1
+fi
 
 deploy_stack true
 
-runtime_arn="$(
-  aws cloudformation describe-stacks \
-    --region "${region}" \
-    --stack-name "${stack_name}" \
-    --query "Stacks[0].Outputs[?OutputKey=='RuntimeArn'].OutputValue | [0]" \
-    --output text
-)"
-runtime_url="$(
-  RUNTIME_ARN="${runtime_arn}" python3 -c \
-    'import os, urllib.parse; print("https://bedrock-agentcore.us-west-2.amazonaws.com/runtimes/" + urllib.parse.quote(os.environ["RUNTIME_ARN"], safe="") + "/invocations?qualifier=default")'
-)"
-api_url="$(
-  aws cloudformation describe-stacks \
-    --region "${region}" \
-    --stack-name "${stack_name}" \
-    --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue | [0]" \
-    --output text
-)"
-user_pool_id="$(
-  aws cloudformation describe-stacks \
-    --region "${region}" \
-    --stack-name "${stack_name}" \
-    --query "Stacks[0].Outputs[?OutputKey=='UserPoolId'].OutputValue | [0]" \
-    --output text
-)"
-user_pool_client_id="$(
-  aws cloudformation describe-stacks \
-    --region "${region}" \
-    --stack-name "${stack_name}" \
-    --query "Stacks[0].Outputs[?OutputKey=='UserPoolClientId'].OutputValue | [0]" \
-    --output text
-)"
-
 echo "Runtime image: ${repository_uri}:${image_tag}"
-echo "AGENTCORE_RUNTIME_URL=${runtime_url}"
-echo "NEXT_PUBLIC_API_BASE_URL=${api_url}"
-echo "NEXT_PUBLIC_COGNITO_USER_POOL_ID=${user_pool_id}"
-echo "NEXT_PUBLIC_COGNITO_CLIENT_ID=${user_pool_client_id}"
+
+# Writes web/.env.local from the stack's own outputs (API URL, Cognito IDs,
+# Runtime URL) plus the fixture recipient in .env. Requires
+# scripts/verify_and_set_env.py to have already set NEXT_PUBLIC_DEMO_RECIPIENT_ADDRESS.
+STACK_NAME="${stack_name}" AWS_DEFAULT_REGION="${region}" \
+  uv run python "${repository_root}/scripts/write_web_env.py"

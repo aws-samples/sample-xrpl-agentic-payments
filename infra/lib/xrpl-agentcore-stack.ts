@@ -13,6 +13,7 @@ import {
   aws_apigatewayv2_authorizers as authorizers,
   aws_apigatewayv2_integrations as integrations,
   aws_bedrockagentcore as agentcore,
+  aws_codebuild as codebuild,
   aws_cognito as cognito,
   aws_dynamodb as dynamodb,
   aws_ecr as ecr,
@@ -21,6 +22,7 @@ import {
   aws_lambda as lambda,
   aws_lambda_event_sources as eventSources,
   aws_logs as logs,
+  aws_s3 as s3,
   aws_secretsmanager as secretsmanager,
   aws_stepfunctions as sfn,
   aws_stepfunctions_tasks as tasks,
@@ -757,6 +759,57 @@ export class XrplAgentCoreStack extends Stack {
     });
     runtimeRepository.grantPull(runtimeRole);
 
+    // Remote build path for the Runtime image. Some environments (this POC's
+    // laptop, a CI runner, a Cloud IDE) have no local container engine at
+    // all. scripts/deploy.sh uploads a small source zip (Dockerfile.runtime,
+    // pyproject.toml, README.md, src/ — exactly what .dockerignore allows
+    // through) and CodeBuild does the ARM64 docker build and push instead.
+    const runtimeBuildSource = new s3.Bucket(this, "RuntimeBuildSource", {
+      removalPolicy: RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      enforceSSL: true,
+      lifecycleRules: [{ expiration: Duration.days(1) }],
+    });
+    const runtimeBuildProject = new codebuild.Project(
+      this,
+      "RuntimeBuildProject",
+      {
+        projectName: "xrpl-agentcore-runtime-build",
+        source: codebuild.Source.s3({
+          bucket: runtimeBuildSource,
+          path: "runtime-build/source.zip",
+        }),
+        environment: {
+          buildImage: codebuild.LinuxArmBuildImage.AMAZON_LINUX_2023_STANDARD_3_0,
+          computeType: codebuild.ComputeType.SMALL,
+          privileged: true,
+        },
+        timeout: Duration.minutes(20),
+        buildSpec: codebuild.BuildSpec.fromObject({
+          version: "0.2",
+          phases: {
+            pre_build: {
+              commands: [
+                "aws ecr get-login-password --region $AWS_REGION | " +
+                  'docker login --username AWS --password-stdin "${REPO_URI%%/*}"',
+              ],
+            },
+            build: {
+              commands: [
+                "docker build --platform linux/arm64 --file Dockerfile.runtime " +
+                  '--tag "${REPO_URI}:${IMAGE_TAG}" .',
+              ],
+            },
+            post_build: {
+              commands: ['docker push "${REPO_URI}:${IMAGE_TAG}"'],
+            },
+          },
+        }),
+      },
+    );
+    runtimeRepository.grantPullPush(runtimeBuildProject);
+
     const runtime = new agentcore.Runtime(this, "AgentRuntime", {
       runtimeName: "XrplTransferAssistant",
       description: "Native AG-UI Strands Runtime for the XRPL Testnet POC",
@@ -841,6 +894,12 @@ export class XrplAgentCoreStack extends Stack {
     new CfnOutput(this, "GatewayUrl", { value: gateway.gatewayUrl ?? "" });
     new CfnOutput(this, "RuntimeRepositoryUri", {
       value: runtimeRepository.repositoryUri,
+    });
+    new CfnOutput(this, "RuntimeBuildProjectName", {
+      value: runtimeBuildProject.projectName,
+    });
+    new CfnOutput(this, "RuntimeBuildSourceBucket", {
+      value: runtimeBuildSource.bucketName,
     });
     const runtimeArnOutput = new CfnOutput(this, "RuntimeArn", {
       value: runtime.agentRuntimeArn,

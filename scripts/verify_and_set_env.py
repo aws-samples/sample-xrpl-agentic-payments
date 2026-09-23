@@ -9,9 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import re
-import tempfile
+import sys
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -19,6 +17,9 @@ from typing import Any
 from xrpl.clients import JsonRpcClient
 from xrpl.core.addresscodec import is_valid_classic_address
 from xrpl.models.requests import AccountInfo, AccountLines, AccountOffers, ServerInfo
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _env_file import upsert_env  # noqa: E402
 
 DEFAULT_RPC = "https://s.altnet.rippletest.net:51234"
 LSF_DEFAULT_RIPPLE = 0x00800000
@@ -218,35 +219,6 @@ def fixture_env_values(fixture_path: Path) -> dict[str, str]:
         if not is_valid_classic_address(address):
             raise ValueError(f"{key} is not a classic XRPL address")
     return values
-
-
-def upsert_env(env_path: Path, values: dict[str, str], template: Path | None = None) -> None:
-    """Set each key in place, keep every other line, and append keys not yet present."""
-
-    if env_path.exists():
-        lines = env_path.read_text().splitlines()
-    elif template is not None and template.exists():
-        lines = template.read_text().splitlines()
-    else:
-        lines = []
-    pending = dict(values)
-    for index, line in enumerate(lines):
-        match = re.match(r"^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=", line)
-        if match and match.group(1) in pending:
-            key = match.group(1)
-            lines[index] = f"{key}={pending.pop(key)}"
-    lines.extend(f"{key}={value}" for key, value in pending.items())
-
-    # .env may hold other local credentials, so write it atomically and owner-only.
-    handle, temporary = tempfile.mkstemp(dir=env_path.parent, prefix=".env.")
-    try:
-        with os.fdopen(handle, "w") as stream:
-            stream.write("\n".join(lines) + "\n")
-        os.chmod(temporary, 0o600)
-        os.replace(temporary, env_path)
-    except BaseException:
-        Path(temporary).unlink(missing_ok=True)
-        raise
 
 
 def main() -> None:

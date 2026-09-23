@@ -30,7 +30,7 @@ and 2 need no AWS account and move no funds.
 |-------|----------------|-------|------|
 | 1. Verify | Lint, unit tests, builds, and CDK synth all pass | Python, `uv`, Node | ~5 min |
 | 2. Local API | Quote → intent → approval works, and a tampered approval is refused | Level 1 | ~2 min |
-| 3. End to end | The agent quotes, you approve, and XRPL Testnet settles | AWS sandbox, Docker | ~30 min |
+| 3. End to end | The agent quotes, you approve, and XRPL Testnet settles | AWS sandbox | ~30 min |
 
 ### Level 1: verify the source
 
@@ -88,7 +88,8 @@ whose `approval_hash` does not match the quoted terms returns `409`.
 
 Use a disposable sandbox account in `us-west-2`. This creates billable AWS
 resources and three Secrets Manager secrets. See
-[Prerequisites](#prerequisites) for Docker and Bedrock model access.
+[Prerequisites](#prerequisites) for Bedrock model access. No local Docker is
+needed; `deploy.sh` builds the Runtime image with AWS CodeBuild.
 
 ```bash
 export AWS_PROFILE=<sandbox-profile> AWS_DEFAULT_REGION=us-west-2
@@ -99,15 +100,12 @@ uv run python scripts/provision_testnet.py --write-secrets
 # 2. Verify the ledger state and write the public wallet addresses to .env.
 uv run python scripts/verify_and_set_env.py
 
-# 3. Deploy. deploy.sh reads the addresses from .env.
+# 3. Deploy. deploy.sh reads the addresses from .env, and, after enabling the
+# Runtime, writes web/.env.local from the stack's own outputs.
 # First time per account: npx cdk bootstrap aws://<account-id>/us-west-2
-./scripts/deploy.sh | tee /tmp/xrpl-deploy.log
+./scripts/deploy.sh
 
-# 4. Point the web app at the deployment.
-{ grep -E '^(AGENTCORE_RUNTIME_URL|NEXT_PUBLIC_[A-Z_]+)=' /tmp/xrpl-deploy.log
-  grep -E '^NEXT_PUBLIC_DEMO_(RECIPIENT_ADDRESS|PAYOUT_ALIAS)=' .env; } > web/.env.local
-
-# 5. Create a sign-in user and start the app.
+# 4. Create a sign-in user and start the app.
 POC_USER_EMAIL=demo@example.com POC_USER_PASSWORD='<strong-disposable-password>' \
   ./scripts/create_poc_user.sh
 npm run dev --workspace web
@@ -201,13 +199,15 @@ For local tests:
 For full deployment and live Testnet acceptance:
 
 - An AWS sandbox account with credentials for CDK, IAM, KMS, DynamoDB, Lambda,
-  API Gateway, Cognito, Step Functions, ECR, Secrets Manager, Amazon Bedrock,
-  and Amazon Bedrock AgentCore.
+  API Gateway, Cognito, Step Functions, ECR, CodeBuild, S3, Secrets Manager,
+  Amazon Bedrock, and Amazon Bedrock AgentCore.
 - Bedrock model access for the configured Sonnet inference profile.
 - AWS CLI v2.
-- Docker with Buildx and Linux ARM64 cross-build support.
 - CDK bootstrap permission in `us-west-2`.
 - Network access to the XRPL Testnet faucet and JSON-RPC endpoint.
+
+No local Docker or other container engine is needed. `deploy.sh` builds and
+pushes the ARM64 Runtime image with AWS CodeBuild.
 
 The deployment script intentionally supports only `us-west-2`.
 
@@ -354,30 +354,24 @@ npx cdk bootstrap "aws://${AWS_ACCOUNT_ID}/us-west-2"
 runs the full verification gate, deploys support resources, pushes the ARM64
 Runtime image to ECR, and enables the AgentCore Runtime in a second CDK pass.
 
-The script prints these frontend values:
-
-```text
-AGENTCORE_RUNTIME_URL=...
-NEXT_PUBLIC_API_BASE_URL=...
-NEXT_PUBLIC_COGNITO_USER_POOL_ID=...
-NEXT_PUBLIC_COGNITO_CLIENT_ID=...
-```
+After the Runtime pass, `deploy.sh` calls `scripts/write_web_env.py`, which
+reads the API URL, Cognito user pool, and Runtime ARN straight from the
+stack's CloudFormation outputs (building `AGENTCORE_RUNTIME_URL` the same way
+`InvokeAgentRuntime` expects), reads the fixture recipient and payout alias
+from `.env`, and writes all six into `web/.env.local`. Nothing here is a
+secret — the URLs and Cognito IDs are endpoints, not credentials — but
+`AGENTCORE_RUNTIME_URL` is still server-only. Never prefix it with
+`NEXT_PUBLIC_`, and never expose AWS credentials to the browser.
 
 ### 4. Configure and start the web application
 
-Create `web/.env.local` using the deployment outputs and fixture recipient:
+To (re)write `web/.env.local` without redeploying — for example, against a
+stack deployed earlier, or a different `STACK_NAME`/`AWS_DEFAULT_REGION` —
+run it directly:
 
-```dotenv
-AGENTCORE_RUNTIME_URL=<printed-runtime-url>
-NEXT_PUBLIC_API_BASE_URL=<printed-api-url>
-NEXT_PUBLIC_COGNITO_USER_POOL_ID=<printed-user-pool-id>
-NEXT_PUBLIC_COGNITO_CLIENT_ID=<printed-user-pool-client-id>
-NEXT_PUBLIC_DEMO_RECIPIENT_ADDRESS=<fixture-recipient-address>
-NEXT_PUBLIC_DEMO_PAYOUT_ALIAS=fixture-bank-token
+```bash
+uv run python scripts/write_web_env.py
 ```
-
-The `AGENTCORE_RUNTIME_URL` value is server-only. Never prefix it with
-`NEXT_PUBLIC_`, and never expose AWS credentials to the browser.
 
 Create or reset a POC Cognito user:
 
