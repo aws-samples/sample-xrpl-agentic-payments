@@ -914,10 +914,15 @@ export class XrplAgentCoreStack extends Stack {
           destinationResourceArn: logGroup.logGroupArn,
         },
       );
-      new logs.CfnDelivery(this, `${id}LogsDelivery`, {
+      const logsDelivery = new logs.CfnDelivery(this, `${id}LogsDelivery`, {
         deliverySourceName: logsSource.name,
         deliveryDestinationArn: logsDestination.attrArn,
       });
+      // deliverySourceName is a plain string, not a Ref/GetAtt token, so CDK
+      // can't infer this dependency on its own — without it, CloudFormation
+      // may delete the source before the delivery that still points at it.
+      logsDelivery.addResourceDependency(logsSource);
+      logsDelivery.addResourceDependency(logsDestination);
 
       const tracesSource = new logs.CfnDeliverySource(
         this,
@@ -928,10 +933,12 @@ export class XrplAgentCoreStack extends Stack {
           resourceArn,
         },
       );
-      new logs.CfnDelivery(this, `${id}TracesDelivery`, {
+      const tracesDelivery = new logs.CfnDelivery(this, `${id}TracesDelivery`, {
         deliverySourceName: tracesSource.name,
         deliveryDestinationArn: tracesDestination.attrArn,
       });
+      tracesDelivery.addResourceDependency(tracesSource);
+      tracesDelivery.addResourceDependency(tracesDestination);
     };
 
     const gatewayLogGroup = new logs.LogGroup(this, "GatewayLogGroup", {
