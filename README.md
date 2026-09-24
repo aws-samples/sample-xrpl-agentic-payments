@@ -279,6 +279,20 @@ run. In this single-account demo nothing else yet searches the registry; its
 value here is the proven mechanism, which is what a shared registry (AWS RAM,
 or org-wide auto-detection) would let another team's agent use as-is.
 
+![AWS Agent Registry catalog with all four records approved](docs/assets/screenshots/AWSAgentRegistry.png)
+
+The `XrplAgentCorePocCatalog` registry, auto-approval enabled: `xrpl-agent-wallet`
+and `xrpl-payments` as agent skills, `xrpl-transfer-assistant` as the custom
+Runtime record, and `xrpl-transfer-gateway` as the MCP server record — all
+four `Approved`, none `Pending approval`.
+
+![AgentCore Gateway console showing enforcement mode and its four targets](docs/assets/screenshots/AgentCoreGateway.png)
+
+The Gateway the registry points to: IAM-only inbound auth, Policy Engine
+`Enforcement enabled` and linked to `XrplTransferPolicy`, and its four
+`Ready` MCP targets — the same default-deny boundary that denied the demo
+role until it got its own narrow permit.
+
 ## Architecture and trust boundaries
 
 ```text
