@@ -257,6 +257,41 @@ application says about it.
   components with refresh-safe status recovery.
 - Disposable XRPL Testnet issuer, trust-line, liquidity, wallet, deployment,
   and acceptance scripts.
+- AWS Agent Registry catalog: the Gateway's MCP tools (live-synced), the
+  Runtime, and the `xrpl-agent-wallet`/`xrpl-payments` skills — see
+  `scripts/demo_registry_discovery.py` for a live, cold-discovery-to-invocation
+  walkthrough ([details](docs/deployment.md#4-agent-registry)).
+
+### What the registry is actually for
+
+It is a discovery layer, not an access-control layer. A consumer that has
+never seen this stack's Gateway URL, ARNs, or code — knowing only the
+registry ID — can find the Gateway's tools and both skills by natural-language
+search. Discovery alone grants nothing: the Gateway's own Policy Engine still
+decides who can invoke a tool, which is why `scripts/demo_registry_discovery.py`
+needed its own narrow IAM role and Cedar permit, not just registry access
+(verified live: search and read succeeded on registry permissions alone;
+invocation was denied until that permit existed). The two skills carry
+further than the Gateway's tools do — their full content is fetchable
+straight out of the registry in one call, since they are static, while a
+Gateway tool still needs a second, separately-authenticated call to actually
+run. In this single-account demo nothing else yet searches the registry; its
+value here is the proven mechanism, which is what a shared registry (AWS RAM,
+or org-wide auto-detection) would let another team's agent use as-is.
+
+![AWS Agent Registry catalog with all four records approved](docs/assets/screenshots/AWSAgentRegistry.png)
+
+The `XrplAgentCorePocCatalog` registry, auto-approval enabled: `xrpl-agent-wallet`
+and `xrpl-payments` as agent skills, `xrpl-transfer-assistant` as the custom
+Runtime record, and `xrpl-transfer-gateway` as the MCP server record — all
+four `Approved`, none `Pending approval`.
+
+![AgentCore Gateway console showing enforcement mode and its four targets](docs/assets/screenshots/AgentCoreGateway.png)
+
+The Gateway the registry points to: IAM-only inbound auth, Policy Engine
+`Enforcement enabled` and linked to `XrplTransferPolicy`, and its four
+`Ready` MCP targets — the same default-deny boundary that denied the demo
+role until it got its own narrow permit.
 
 ## Architecture and trust boundaries
 
@@ -310,7 +345,8 @@ For full deployment and live Testnet acceptance:
 
 - An AWS sandbox account with credentials for CDK, IAM, KMS, DynamoDB, Lambda,
   API Gateway, Cognito, Step Functions, ECR, CodeBuild, S3, Secrets Manager,
-  CloudWatch Logs, X-Ray, Amazon Bedrock, and Amazon Bedrock AgentCore.
+  CloudWatch Logs, X-Ray, Amazon Bedrock, Amazon Bedrock AgentCore, and AWS
+  Agent Registry.
 - Bedrock model access for the configured Sonnet inference profile.
 - AWS CLI v2.
 - CDK bootstrap permission in your chosen region.

@@ -56,12 +56,55 @@ validation or `LastLedgerSequence` expiry.
 - Gateway: exactly four tools—corridors, quotes, intent creation, and status.
   The Runtime injects the authenticated Cognito subject; model arguments cannot
   replace it.
-- Policy: enforcement mode with only four explicit Runtime-to-tool permits.
+- Policy: enforcement mode with four explicit Runtime-to-tool permits, plus
+  one narrow exception — `list_supported_corridors` only — for the registry
+  discovery demo's consumer role (see [Agent Registry](#agent-registry)).
   Everything else is denied by absence of a permit.
 - Memory: off by default and limited to structured corridor, payout, and
   slippage preferences under `/preferences/{actorId}/`.
 - Payments: AgentCore Payments is not used because XRPL is not a supported
   instrument. `XrplX402Adapter` is an isolated replacement point.
+
+## Agent Registry
+
+`infra/lib/xrpl-agentcore-stack.ts` declares one `AWS::AgentRegistry::Registry`
+(IAM-authorized, auto-approved — a single-account demo catalog with no
+separate curator) and three records:
+
+- **Gateway, as an `MCP` record.** Synced live from `gateway.gatewayUrl` via
+  an IAM credential provider — a dedicated `RegistrySyncRole`, assumable only
+  by `agent-registry.amazonaws.com` (not `bedrock-agentcore.amazonaws.com`,
+  which is only correct for the deprecated preview namespace — confirmed live
+  by a failed sync until fixed), scoped to `bedrock-agentcore:InvokeGateway`
+  on this one Gateway. Sync populates the server URL and metadata, but the
+  synced **tool list comes back empty**: the sync role has no Policy Engine
+  permit, so its own `tools/list` call is denied by the same default-deny
+  Policy that gates everything else on this Gateway. Fixing that would mean
+  granting `RegistrySyncRole` a Policy permit too — deliberately not done
+  here; see the demo-role tradeoff below.
+- **Runtime, as a `CUSTOM` record.** The registry's AG-UI descriptor is
+  source-only and, per AWS's registry-sync docs, live sync currently only
+  covers `mcpServer`/`a2aAgentCard` sources — and source-only descriptors
+  don't accept credentials regardless, which the Runtime's Cognito-JWT
+  authorizer requires. So this record is a self-authored JSON blob (protocol,
+  Runtime ARN, auth model) rather than a live sync, and only deploys when the
+  Runtime itself does (`DeployAgentRuntimeCondition`).
+- **`xrpl-agent-wallet` and `xrpl-payments`, as `SKILL` records.** Each
+  record's `AgentSkillsMdDescriptor` is populated straight from that skill's
+  `SKILL.md` under `.claude/skills/`, read at synth time — the registry stays
+  in sync with the source of truth on every deploy, no separate copy to
+  maintain. AWS's own control plane parses the frontmatter and enforces a
+  1024-character `description` limit; `xrpl-agent-wallet`'s exceeded it by a
+  few characters, so the copy sent to the registry (never the source
+  `SKILL.md`) is truncated to fit.
+- **Demo consumer role, proving the registry is a real access boundary.**
+  `RegistryConsumerDemoRole` (see `scripts/demo_registry_discovery.py`) knows
+  only the registry ID — never the Gateway URL or ARNs — and can search the
+  registry, read approved records, and call exactly one tool:
+  `list_supported_corridors`, via one narrow Policy Engine permit added
+  alongside the Runtime's four. That permit is a deliberate, disclosed
+  exception to "Runtime role only," scoped to a single read-only,
+  non-owner-scoped tool — not a general opening.
 
 ## Approval commitment
 

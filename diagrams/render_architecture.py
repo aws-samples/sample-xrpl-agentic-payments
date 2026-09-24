@@ -55,6 +55,9 @@ NODES = {
                     "MCP, IAM (SigV4) auth — 4 tools, none can sign",
                     "agent"),
 
+    "REGISTRY": Node(7, 0, "▣", "AWS Agent Registry",
+                    "1 registry · 3 records: Gateway (MCP, live-synced), "
+                    "Runtime (custom), 2 skills (from SKILL.md)", "agent"),
     "TOOLS":   Node(6, 1, "lambda.png", "4 tool Lambdas",
                     "corridors, quote, create intent, status", "compute"),
     "TABLE":   Node(6, 2, "dynamodb.png", "Transfer table",
@@ -94,6 +97,8 @@ EDGES = [
     Edge("RUNTIME", "GATEWAY", "4 MCP tool call + trusted owner_sub",
          nudge_y=0.12),
     Edge("GATEWAY", "POLICY", "authorize", style="dashed", nudge_x=0.40),
+    Edge("REGISTRY", "GATEWAY", "MCP tool sync (IAM SigV4)", style="dashed",
+         nudge_x=-0.30, nudge_y=-0.15),
     Edge("GATEWAY", "TOOLS", "5", nudge_y=0.10),
     Edge("TOOLS", "TABLE", "6 quote, intent", nudge_x=0.50),
 
@@ -128,8 +133,8 @@ ZONES = [
     Zone(["XRPL"], "Outside AWS — public ledger", CAT["ext"], pad=0.30,
          dash=(0, (3, 3))),
     Zone(["COGNITO", "HTTPAPI", "ECR", "BEDROCK", "RUNTIME", "APIFN", "KMS",
-          "MEMORY", "POLICY", "GATEWAY", "TOOLS", "TABLE", "OUTBOX", "SFN",
-          "SECRETS", "SIGNER", "ARTIFACT", "RECON"],
+          "MEMORY", "POLICY", "GATEWAY", "REGISTRY", "TOOLS", "TABLE",
+          "OUTBOX", "SFN", "SECRETS", "SIGNER", "ARTIFACT", "RECON"],
          "AWS account  ·  us-west-2  ·  one CloudFormation stack (XrplAgentCorePoc)",
          "#232f3e", pad=0.62, dash=(0, (7, 4)), contains_others=True),
     Zone(["BEDROCK", "RUNTIME", "MEMORY", "POLICY", "GATEWAY", "TOOLS"],
@@ -161,7 +166,8 @@ SPEC = Spec(
         "How to read it:\n"
         "•  1-6  The agent can only list corridors, quote, create an UNAPPROVED intent and read "
         "status. The Runtime injects owner_sub from the validated JWT; the model cannot set it. "
-        "Policy permits just those 4 tools, for the Runtime role only.\n"
+        "Policy permits those 4 tools for the Runtime role, plus one narrow read-only exception "
+        "(list_supported_corridors) for the registry demo consumer role — see below.\n"
         "•  7-8  Approval never goes through the model: the approval card calls the REST API "
         "directly, and the approve route writes APPROVED plus the outbox item in one DynamoDB "
         "transaction, bound to a SHA-256 commitment over every approved term.\n"
@@ -170,7 +176,12 @@ SPEC = Spec(
         "a validated ledger → complete payout. On failure after the fee, it refunds the fee.\n"
         "•  Signer and Reconciler both write conditional state transitions to the transfer table; "
         "only the Signer's arrow is drawn. Runtime is created only when DeployAgentRuntime=true "
-        "(after its image is in ECR). KMS encrypts both tables, Memory and ECR."
+        "(after its image is in ECR). KMS encrypts both tables, Memory and ECR.\n"
+        "•  Agent Registry is a catalog, not a request-path hop: it attempts to sync the Gateway's "
+        "MCP tool definitions live (IAM SigV4), but that sync role has no Policy Engine permit "
+        "either, so the synced tool list comes back empty — confirmed live, a disclosed limitation, "
+        "not fixed here. The Runtime and skill records are static data set at deploy time (Runtime "
+        "ARN, and each skill's SKILL.md) — no edge is drawn for those."
     ),
 )
 

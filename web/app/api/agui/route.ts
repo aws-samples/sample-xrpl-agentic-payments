@@ -26,15 +26,36 @@ export async function POST(request: NextRequest): Promise<Response> {
     return Response.json({ error: "request too large" }, { status: 413 });
   }
 
+  // AgentCore groups traces into its Agents/Sessions observability views by
+  // this header, not by the AG-UI protocol's own threadId in the JSON body —
+  // without it, invocations still work but never appear under a session.
+  // See docs/deployment.md#observability.
+  const headers: Record<string, string> = {
+    Authorization: authorization,
+    "Content-Type": "application/json",
+    Accept: "text/event-stream",
+  };
+  const threadId = (() => {
+    try {
+      const parsed: unknown = JSON.parse(body);
+      const value =
+        parsed && typeof parsed === "object" && "threadId" in parsed
+          ? (parsed as { threadId: unknown }).threadId
+          : undefined;
+      return typeof value === "string" && value.length > 0 ? value : undefined;
+    } catch {
+      return undefined;
+    }
+  })();
+  if (threadId) {
+    headers["X-Amzn-Bedrock-AgentCore-Runtime-Session-Id"] = threadId;
+  }
+
   let upstream: Response;
   try {
     upstream = await fetch(runtimeUrl, {
       method: "POST",
-      headers: {
-        Authorization: authorization,
-        "Content-Type": "application/json",
-        Accept: "text/event-stream",
-      },
+      headers,
       body,
       signal: request.signal,
       cache: "no-store",

@@ -173,7 +173,35 @@ run this query against that log group to isolate real chat traffic from
 fields @timestamp, @message | filter @message like /invocations/ | sort @timestamp desc
 ```
 
-## 4. Acceptance
+## 4. Agent Registry
+
+The stack registers the Gateway, the Runtime, and both Claude Code skills in
+an AWS Agent Registry catalog (see
+[docs/architecture.md#agent-registry](architecture.md#agent-registry)). AWS
+creates every record in `DRAFT` status regardless of the registry's
+auto-approval configuration — auto-approval decides the outcome of a
+submission, it doesn't submit for you. Run this once after every deploy that
+creates or changes a record:
+
+```bash
+./scripts/submit_registry_records_for_approval.sh
+```
+
+`DRAFT` records are invisible to search — skipping this step means the
+registry exists but nothing in it is discoverable. Then see it actually
+used, cold, by a consumer that has never seen this stack's Gateway URL or
+ARNs — only the registry ID:
+
+```bash
+uv run python scripts/demo_registry_discovery.py
+```
+
+It searches the registry by natural language, pulls back the full Gateway
+record (URL and, where sync permits allow it, tool definitions), invokes
+`list_supported_corridors` live with a narrowly-scoped IAM role, and pulls
+the `xrpl-agent-wallet` skill's full content straight out of the registry.
+
+## 5. Acceptance
 
 In the UI:
 

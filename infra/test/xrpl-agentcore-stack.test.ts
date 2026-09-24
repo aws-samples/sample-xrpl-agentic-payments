@@ -95,7 +95,10 @@ describe("XrplAgentCoreStack", () => {
         Mode: "ENFORCE",
       },
     });
-    template.resourceCountIs("AWS::BedrockAgentCore::Policy", 4);
+    // 4 Runtime-to-tool permits, plus one deliberate, narrow exception:
+    // the registry-discovery demo consumer role may call
+    // list_supported_corridors only. See docs/architecture.md#agent-registry.
+    template.resourceCountIs("AWS::BedrockAgentCore::Policy", 5);
 
     const resources = synthesized().Resources;
     const targets = Object.entries<any>(resources)
@@ -114,6 +117,22 @@ describe("XrplAgentCoreStack", () => {
           ).includes(targetLogicalId),
         ),
       ).toBe(true);
+    }
+
+    const cedarStatements = policies.map((policy) =>
+      JSON.stringify(policy.Properties.Definition.Cedar.Statement),
+    );
+    const demoConsumerStatements = cedarStatements.filter((statement) =>
+      statement.includes("RegistryConsumerDemoRole"),
+    );
+    expect(demoConsumerStatements).toHaveLength(1);
+    expect(demoConsumerStatements[0]).toContain(
+      "list-supported-corridors___list_supported_corridors",
+    );
+    for (const statement of cedarStatements) {
+      if (statement.includes("RegistryConsumerDemoRole")) continue;
+      // Every other permit stays scoped to the Runtime role only.
+      expect(statement).not.toContain("RegistryConsumerDemoRole");
     }
   });
 

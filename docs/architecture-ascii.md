@@ -204,6 +204,15 @@ flags, and the exact delivered amount.
   | TypeScript CDK       |----------->| AWS CloudFormation   |
   | infrastructure code  |            | deployment           |
   +----------------------+            +----------------------+
+
+  +----------------------+  MCP tool sync (IAM SigV4)   +---------------------+
+  | AWS Agent Registry   |<---------------------------> | AgentCore Gateway   |
+  | 1 registry, 3 records|      the only live call      | MCP tool surface    |
+  +----------+-----------+                              +----------------------+
+             |
+             | static data set at deploy time — no live call
+             v
+  Runtime ARN (custom record) + xrpl-agent-wallet / xrpl-payments SKILL.md (skill records)
 ```
 
 ## 5. End-to-end sequence
