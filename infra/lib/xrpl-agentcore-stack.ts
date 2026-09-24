@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import * as path from "node:path";
 import {
   Annotations,
@@ -10,6 +11,7 @@ import {
   RemovalPolicy,
   Stack,
   StackProps,
+  aws_agentregistry as agentregistry,
   aws_apigatewayv2 as apigwv2,
   aws_apigatewayv2_authorizers as authorizers,
   aws_apigatewayv2_integrations as integrations,
@@ -558,7 +560,15 @@ export class XrplAgentCoreStack extends Stack {
       description: "Non-custodial AgentCore transfer planning tools",
       authorizerConfiguration: agentcore.GatewayAuthorizer.usingAwsIam(),
       protocolConfiguration: agentcore.GatewayProtocol.mcp({
-        supportedVersions: [agentcore.MCPProtocolVersion.of(MCP_VERSION)],
+        // The Runtime always requests MCP_VERSION explicitly. 2025-11-25 is
+        // additionally listed because AWS Agent Registry's own MCP sync
+        // client (which lists this Gateway's tools for the registry record
+        // below) speaks that version and returned an empty tool list
+        // without it — confirmed live, not a guess.
+        supportedVersions: [
+          agentcore.MCPProtocolVersion.of(MCP_VERSION),
+          agentcore.MCPProtocolVersion.of("2025-11-25"),
+        ],
         instructions:
           "Expose corridors, quotes, transfer intent creation, and status only.",
       }),
@@ -992,6 +1002,292 @@ export class XrplAgentCoreStack extends Stack {
     new CfnOutput(this, "ExecutionArtifactTableName", {
       value: artifactTable.tableName,
     });
+    // AWS Agent Registry: a catalog for the Gateway's MCP tools and the
+    // xrpl-agent-wallet/xrpl-payments Claude Code skills. Auto-approved since
+    // this is a single-account demo catalog with no separate curator.
+    // See docs/architecture.md#agent-registry.
+    const registry = new agentregistry.CfnRegistry(this, "AgentRegistry", {
+      name: `${this.stackName}Catalog`.replace(/[^a-zA-Z0-9]/g, "").slice(0, 64),
+      description:
+        "Catalog of the XRPL transfer agent's Gateway MCP tools and skills.",
+      authorizerType: "AWS_IAM",
+      approvalConfiguration: {
+        autoApprovalRules: ["APPROVE_ALL"],
+      },
+    });
+
+    // The registry service itself assumes this role to SigV4-sign the
+    // Gateway MCP-tool sync request; scoped to only that one action on this
+    // one Gateway. The assuming principal is agent-registry.amazonaws.com in
+    // this (current) namespace — bedrock-agentcore.amazonaws.com was only
+    // correct for the deprecated preview namespace; using it here fails sync
+    // with "Unable to assume the provided IAM role for MCP server
+    // authentication." See
+    // https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/registry-faq.html#update-iam-trust-policies-for-synchronized-records
+    // and
+    // https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/registry-sync-records.html#synchronize-from-an-iam-protected-mcp-server
+    const registrySyncRole = new iam.Role(this, "RegistrySyncRole", {
+      assumedBy: new iam.ServicePrincipal("agent-registry.amazonaws.com", {
+        conditions: {
+          StringEquals: { "aws:SourceAccount": this.account },
+        },
+      }),
+      description:
+        "Assumed by AWS Agent Registry to sync the Gateway's MCP tool catalog.",
+    });
+    registrySyncRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["bedrock-agentcore:InvokeGateway"],
+        resources: [gateway.gatewayArn],
+      }),
+    );
+
+    // Registered as MCP (not GATEWAY) to match AWS's own AgentCore Gateway
+    // sync examples — GATEWAY as a RecordType exists, but the documented
+    // Gateway-sync walkthrough uses `--record-type MCP` with a `mcpServer`
+    // descriptor.
+    new agentregistry.CfnRegistryRecord(this, "GatewayRegistryRecord", {
+      registryId: registry.attrRegistryId,
+      name: "xrpl-transfer-gateway",
+      displayName: "XRPL transfer agent — Gateway tools",
+      description:
+        "MCP tools exposed by the AgentCore Gateway for the XRPL cross-border transfer agent (quote, intent, approval, settlement).",
+      recordType: "MCP",
+      descriptors: {
+        mcpServer: {
+          source: {
+            fromUrl: {
+              url: gateway.gatewayUrl ?? "",
+              credentialProviderConfigurations: [
+                {
+                  credentialProviderType: "IAM",
+                  credentialProvider: {
+                    iamCredentialProvider: {
+                      roleArn: registrySyncRole.roleArn,
+                      service: "bedrock-agentcore",
+                      region: this.region,
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    });
+
+    // The Runtime speaks AG-UI, not A2A, and requires Cognito-JWT auth. The
+    // registry's AG-UI descriptor is source-only and (per AWS docs) sync is
+    // currently only supported for mcpServer/a2aAgentCard sources, and
+    // source-only descriptors don't accept credentials anyway — so there is
+    // no supported way to have the registry sync this Runtime live. Register
+    // it as a CUSTOM record with a self-authored description instead.
+    const runtimeRegistryData = this.toJsonString({
+      protocol: "AG-UI",
+      agentRuntimeArn: runtime.agentRuntimeArn,
+      description:
+        "Strands-based XRPL cross-border transfer assistant. Consumes the xrpl-transfer-gateway MCP tools and the xrpl-agent-wallet/xrpl-payments skills.",
+      authorization:
+        "Cognito-issued JWT via the Runtime's own authorizer; the deployed web app proxies browser sessions through /api/agui.",
+      model: "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    });
+    const runtimeRegistryRecord = new agentregistry.CfnRegistryRecord(
+      this,
+      "RuntimeRegistryRecord",
+      {
+        registryId: registry.attrRegistryId,
+        name: "xrpl-transfer-assistant",
+        displayName: "XRPL transfer assistant (AG-UI)",
+        description:
+          "AgentCore Runtime hosting the XRPL cross-border transfer assistant over the AG-UI protocol.",
+        recordType: "CUSTOM",
+        descriptors: {
+          custom: {
+            data: runtimeRegistryData,
+          },
+        },
+      },
+    );
+    runtimeRegistryRecord.cfnOptions.condition = deployAgentRuntimeCondition;
+
+    // AWS Agent Registry's control plane parses SKILL.md frontmatter and
+    // rejects a `description` over 1024 characters — hit deploying this
+    // stack, not a guess. This truncates only the copy sent to the registry;
+    // .claude/skills/*/SKILL.md, which Claude Code itself reads, is never
+    // modified. A no-op when the description already fits.
+    const REGISTRY_SKILL_DESCRIPTION_LIMIT = 1024;
+    function truncateSkillMdDescriptionForRegistry(skillMd: string): string {
+      const frontmatterMatch = skillMd.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+      if (!frontmatterMatch) {
+        return skillMd;
+      }
+      const [, frontmatter, body] = frontmatterMatch;
+      const descriptionMatch = frontmatter.match(
+        /^description:[ \t]*>?[ \t]*\n((?:[ \t]+.*\n?|\n)*)/m,
+      );
+      if (!descriptionMatch) {
+        return skillMd;
+      }
+      const paragraphs = descriptionMatch[1]
+        .split(/\n\s*\n/)
+        .map((paragraph) => paragraph.split(/\s+/).join(" ").trim())
+        .filter(Boolean);
+      const joined = paragraphs.join(" ");
+      if (joined.length <= REGISTRY_SKILL_DESCRIPTION_LIMIT) {
+        return skillMd;
+      }
+      const truncated = `${joined
+        .slice(0, REGISTRY_SKILL_DESCRIPTION_LIMIT - 1)
+        .replace(/\s+\S*$/, "")}…`;
+      // A YAML single-quoted scalar, not JSON.stringify: JSON escaping would
+      // backslash-escape the description's own double quotes (it quotes
+      // trigger phrases like "send XRP"), adding characters back past the
+      // limit we just trimmed to. Single-quoted YAML only doubles `'`.
+      const yamlSingleQuoted = truncated.replace(/'/g, "''");
+      const newFrontmatter = frontmatter.replace(
+        descriptionMatch[0],
+        `description: '${yamlSingleQuoted}'\n`,
+      );
+      return `---\n${newFrontmatter}\n---\n${body}`;
+    }
+
+    // xrpl-agent-wallet and xrpl-payments Claude Code skills, cataloged from
+    // their SKILL.md content so the registry stays in sync with the source
+    // of truth in .claude/skills/ on every deploy.
+    const skillRecords: Array<{
+      constructId: string;
+      name: string;
+      displayName: string;
+      skillDir: string;
+    }> = [
+      {
+        constructId: "XrplAgentWalletSkillRecord",
+        name: "xrpl-agent-wallet",
+        displayName: "XRPL agent wallet",
+        skillDir: "xrpl-agent-wallet",
+      },
+      {
+        constructId: "XrplPaymentsSkillRecord",
+        name: "xrpl-payments",
+        displayName: "XRPL payments",
+        skillDir: "xrpl-payments",
+      },
+    ];
+    for (const skill of skillRecords) {
+      const skillMdPath = path.join(
+        __dirname,
+        "..",
+        "..",
+        ".claude",
+        "skills",
+        skill.skillDir,
+        "SKILL.md",
+      );
+      new agentregistry.CfnRegistryRecord(this, skill.constructId, {
+        registryId: registry.attrRegistryId,
+        name: skill.name,
+        displayName: skill.displayName,
+        recordType: "SKILL",
+        descriptors: {
+          agentSkillsDefinition: {
+            additionalData: {
+              skillMd: {
+                data: truncateSkillMdDescriptionForRegistry(
+                  fs.readFileSync(skillMdPath, "utf-8"),
+                ),
+                dataSchemaVersion: "1.0",
+              },
+            },
+          },
+        },
+      });
+    }
+
+    // Stands in for a separate, minimally-privileged consumer that has never
+    // seen this stack's Gateway URL or ARNs — only the registry ID (the one
+    // thing published out of band; everything else, this role's own grant
+    // proves, is discovered through the registry itself). Permission set
+    // matches AWS's documented consumer baseline exactly — see
+    // https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/registry-iam-permissions.html
+    // — plus bedrock-agentcore:InvokeGateway on this one Gateway, which is
+    // what a real consumer would separately be granted after the registry
+    // pointed them at it. See scripts/demo_registry_discovery.py.
+    const registryConsumerDemoRole = new iam.Role(
+      this,
+      "RegistryConsumerDemoRole",
+      {
+        assumedBy: new iam.AccountRootPrincipal(),
+        description:
+          "Assumed by scripts/demo_registry_discovery.py to search the Agent Registry cold and invoke the Gateway using only what the registry reveals.",
+      },
+    );
+    registryConsumerDemoRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["agent-registry:ListRegistries"],
+        resources: [`arn:aws:agent-registry:${this.region}:${this.account}:*`],
+      }),
+    );
+    registryConsumerDemoRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: [
+          "agent-registry:GetRegistry",
+          "agent-registry:SearchDiscoverableRegistryRecords",
+          "agent-registry:ListDiscoverableRegistryRecords",
+          "agent-registry:GetDiscoverableRegistryRecord",
+        ],
+        // GetDiscoverableRegistryRecord (which also authorizes
+        // BatchGetDiscoverableRegistryRecord) checks against the record's
+        // own ARN (registry/<id>/record/<id>), not the bare registry ARN —
+        // confirmed live: the exact registry ARN alone denied it. The
+        // trailing wildcard matches AWS's own documented consumer policy.
+        resources: [`${registry.attrRegistryArn}/*`, registry.attrRegistryArn],
+      }),
+    );
+    registryConsumerDemoRole.addToPolicy(
+      new iam.PolicyStatement({
+        actions: ["bedrock-agentcore:InvokeGateway"],
+        resources: [gateway.gatewayArn],
+      }),
+    );
+
+    // bedrock-agentcore:InvokeGateway alone isn't enough — the Gateway's
+    // Policy Engine is default-deny with permits scoped to the Runtime's
+    // role only (confirmed live: without this, the call fails with "Tool
+    // Execution Denied ... denied by default"). This is a deliberate,
+    // narrow exception to that invariant for the demo: one more principal,
+    // one read-only, non-owner-scoped tool — not a general opening.
+    const registryConsumerDemoPrincipal =
+      `arn:aws:sts::${this.account}:assumed-role/${registryConsumerDemoRole.roleName}`;
+    const demoListCorridorsPolicy = policyEngine.addPolicy(
+      "PermitRegistryConsumerDemoListCorridors",
+      {
+        policyName: "PermitRegistryConsumerDemoListCorridors",
+        description:
+          "Permit the registry-discovery demo role to call list_supported_corridors only",
+        validationMode: agentcore.PolicyValidationMode.FAIL_ON_ANY_FINDINGS,
+        statement: agentcore.PolicyStatement.fromCedar(
+          [
+            "permit(",
+            `  principal == AgentCore::IamEntity::"${registryConsumerDemoPrincipal}",`,
+            '  action == AgentCore::Action::"list-supported-corridors___list_supported_corridors",',
+            `  resource == AgentCore::Gateway::"${gateway.gatewayArn}"`,
+            ");",
+          ].join("\n"),
+        ),
+      },
+    );
+    demoListCorridorsPolicy.node.addDependency(
+      gatewayTargetConstructs.get("ListCorridorsTool") as Construct,
+    );
+
+    new CfnOutput(this, "AgentRegistryId", { value: registry.attrRegistryId });
+    new CfnOutput(this, "AgentRegistryArn", {
+      value: registry.attrRegistryArn,
+    });
+    new CfnOutput(this, "RegistryConsumerDemoRoleArn", {
+      value: registryConsumerDemoRole.roleArn,
+    });
+
     new CfnOutput(this, "TransferStateMachineArn", {
       value: stateMachine.stateMachineArn,
     });

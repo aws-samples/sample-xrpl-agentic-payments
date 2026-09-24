@@ -51,3 +51,7 @@ service, and it runs on the operator's machine rather than in the account.
 - **XRP Ledger** has no AWS icon, and the XRP brand mark is a third-party
   trademark, so it is drawn as a glyph tile (`◈`) rather than an approximate
   substitute.
+- **AWS Agent Registry** GA'd (Aug 2026) after this repo's vendored icon
+  package snapshot (`Icon-package_04302026`), so no official icon is
+  available yet. Drawn as a glyph tile (`▣`) rather than borrowing an
+  unrelated icon.
